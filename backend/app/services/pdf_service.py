@@ -341,7 +341,7 @@ class PDFService:
         pdf.set_text_color(*NAVY)
         pdf.set_font(font_name, 'B', 13 if font_name == 'THSarabun' else 11)
         if is_anon:
-            pdf.cell(0, 6, "แพทย์ผู้ตรวจ: ไม่ระบุชื่อและนามสกุล (ผู้ประสงค์ไม่เปิดเผยชื่อ)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(0, 6, "แพทย์ผู้ตรวจ: ไม่ระบุชื่อและนามสกุล", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_xy(35, y_pos + 11)
             pdf.set_text_color(71, 85, 105)
             pdf.set_font(font_name, '', 10.5 if font_name == 'THSarabun' else 9.5)

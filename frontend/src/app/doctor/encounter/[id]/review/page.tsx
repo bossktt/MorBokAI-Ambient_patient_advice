@@ -202,7 +202,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           <div className="space-y-0.5 text-left">
             <div className="text-xs text-slate-300 font-bold uppercase tracking-wide">แพทย์ผู้ยืนยันโน้ต</div>
             <div className="text-base font-extrabold">
-              {isAnonymous ? 'ไม่ระบุชื่อ (Anonymous)' : `นพ./พญ. ${doctorInfo.first_name} ${doctorInfo.surname}`}
+              {isAnonymous ? 'ไม่ระบุชื่อและนามสกุล' : `นพ./พญ. ${doctorInfo.first_name} ${doctorInfo.surname}`}
             </div>
             <div className="text-xs text-slate-200">
               เลขประกอบวิชาชีพ: <span className="font-mono font-bold text-[#75f999]">{isAnonymous ? 'ไม่เปิดเผย' : doctorInfo.license_no}</span>
