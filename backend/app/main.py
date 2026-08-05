@@ -166,6 +166,22 @@ def create_encounter(payload: dict = None):
         "doctor_info": doctor_info
     }
 
+@app.post(f"{settings.API_PREFIX}/encounters/transcribe-audio")
+async def transcribe_audio(request: Request):
+    """
+    Screen 3: Receives raw audio bytes (WebM/Opus from MediaRecorder) and returns
+    the transcribed Thai text via the multi-tier ASR pipeline.
+    """
+    audio_bytes = await request.body()
+    if not audio_bytes:
+        return {"status": "EMPTY", "transcript": ""}
+
+    transcript = MultiTierASRService.transcribe_audio_bytes(audio_bytes)
+    return {
+        "status": "SUCCESS" if transcript else "EMPTY",
+        "transcript": transcript
+    }
+
 @app.post(f"{settings.API_PREFIX}/encounters/process-transcript")
 def process_transcript(payload: dict):
     """

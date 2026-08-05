@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { WS_BASE } from '@/lib/api';
+import { API_BASE, WS_BASE } from '@/lib/api';
 
 export default function AmbientScribePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -22,6 +22,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const isPausedRef = useRef(false);
   const isStoppedRef = useRef(false);
 
@@ -68,8 +69,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
-            if (!isPausedRef.current && event.data.size > 0 && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(event.data);
+            if (event.data.size > 0) {
+              chunksRef.current.push(event.data);
+              if (!isPausedRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(event.data);
+              }
             }
           };
 
@@ -176,21 +180,47 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     setIsRecording(false);
     isStoppedRef.current = true;
     setIsProcessing(true);
+
     if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
+    }
+
+    const typedText = transcript.trim();
+
+    // Transcribe recorded audio via backend ASR, fall back to typed text.
+    const uploadAndTranscribe = async () => {
+      const chunks = chunksRef.current;
       try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
+        if (chunks.length > 0) {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'audio/webm' },
+            body: blob,
+            timeout: 45000,
+          } as RequestInit);
+          const data = await res.json();
+          if (data.transcript && data.transcript.trim()) {
+            return data.transcript.trim();
+          }
+        }
+      } catch (e) {
+        console.warn('Backend transcription failed:', e);
+      }
+      return typedText;
+    };
 
-    const finalTranscript = transcript.trim();
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
-    }
-
-    setTimeout(() => {
-      router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
-    }, 1200);
+    uploadAndTranscribe().then((finalTranscript) => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
+      }
+      setTimeout(() => {
+        router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
+      }, 1200);
+    });
   };
 
   return (
