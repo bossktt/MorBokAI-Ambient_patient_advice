@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 
 export default function PDPADisclaimerPage() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function PDPADisclaimerPage() {
     setIsCreating(true);
 
     try {
-      const res = await fetch('http://localhost:8080/api/v1/encounters/create', {
+      const res = await fetch(`${API_BASE}/api/v1/encounters/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctor_info: doctorInfo })

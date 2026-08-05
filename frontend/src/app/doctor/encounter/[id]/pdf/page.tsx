@@ -4,6 +4,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
+import { API_BASE } from '@/lib/api';
 
 export default function PDFDownloadPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -12,7 +13,7 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
   const searchParams = useSearchParams();
 
   const pdfId = searchParams.get('pdf_id') || `PDF_${encounterId}`;
-  const downloadUrl = `http://localhost:8080/api/v1/pdf/${pdfId}/download`;
+  const downloadUrl = `${API_BASE}/api/v1/pdf/${pdfId}/download`;
 
   const [secondsRemaining, setSecondsRemaining] = useState(600); // 10 minutes = 600 seconds
   const [isExpired, setIsExpired] = useState(false);

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 
 function PatientPairContent() {
   const searchParams = useSearchParams();
@@ -35,7 +36,7 @@ function PatientPairContent() {
 
     setStatus('PAIRING');
     try {
-      const res = await fetch('http://localhost:8080/api/v1/encounters/pair', {
+      const res = await fetch(`${API_BASE}/api/v1/encounters/pair`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

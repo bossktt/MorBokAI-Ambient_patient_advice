@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { WS_BASE } from '@/lib/api';
 
 export default function AmbientScribePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -48,7 +49,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const wsUrl = `ws://localhost:8080/ws/audio-stream/${encounterId}`;
+    const wsUrl = `${WS_BASE}/ws/audio-stream/${encounterId}`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 

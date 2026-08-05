@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
+import { API_BASE } from '@/lib/api';
 
 export default function NewEncounterPage() {
   const router = useRouter();
@@ -25,12 +26,12 @@ export default function NewEncounterPage() {
     }
 
     // Create session via FastAPI backend
-    fetch('http://localhost:8080/api/v1/encounters/create', { method: 'POST' })
+    fetch(`${API_BASE}/api/v1/encounters/create`, { method: 'POST' })
       .then((res) => res.json())
       .then((data) => {
         setEncounterId(data.encounter_id);
         setPairingPin(data.pairing_pin || '7658');
-        setQrCodeUrl(data.qr_code_url || `http://localhost:3000/patient/pair?pin=${data.pairing_pin}`);
+        setQrCodeUrl(data.qr_code_url || `${window.location.origin}/patient/pair?pin=${data.pairing_pin}`);
         setIsLoading(false);
       })
       .catch(() => {
@@ -38,7 +39,7 @@ export default function NewEncounterPage() {
         const randomPin = `${Math.floor(1000 + Math.random() * 9000)}`;
         setEncounterId(mockId);
         setPairingPin(randomPin);
-        setQrCodeUrl(`http://localhost:3000/patient/pair?pin=${randomPin}`);
+        setQrCodeUrl(`${window.location.origin}/patient/pair?pin=${randomPin}`);
         setIsLoading(false);
       });
   }, []);
@@ -47,7 +48,7 @@ export default function NewEncounterPage() {
   useEffect(() => {
     if (!encounterId) return;
     const interval = setInterval(() => {
-      fetch(`http://localhost:8080/api/v1/encounters/${encounterId}`)
+      fetch(`${API_BASE}/api/v1/encounters/${encounterId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.status === 'PAIRED' || data.status === 'REVIEW' || data.status === 'DELIVERED') {

@@ -305,7 +305,10 @@ def export_encounter_pdf(encounter_id: str, payload: dict):
     cache_set(f"encounter:{encounter_id}:status", "PDF_GENERATED")
     cache_set(f"encounter:{encounter_id}:pdf_id", pdf_id)
 
-    download_url = f"http://localhost:8080{settings.API_PREFIX}/pdf/{pdf_id}/download"
+    base_url = getattr(settings, "PUBLIC_BASE_URL", "") or os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    if not base_url:
+        base_url = f"http://localhost:8080"
+    download_url = f"{base_url}{settings.API_PREFIX}/pdf/{pdf_id}/download"
 
     return {
         "status": "PDF_CREATED",

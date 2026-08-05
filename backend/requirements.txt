@@ -1,0 +1,10 @@
+# Render deployment — minimal deps actually used by the app
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+redis>=5.0.3
+requests>=2.31.0
+pythainlp>=5.0.0
+fpdf2>=2.7.0
+pillow>=10.0.0

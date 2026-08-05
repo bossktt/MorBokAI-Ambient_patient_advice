@@ -19,6 +19,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 
 export default function ReviewEncounterPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -66,7 +67,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
         // Trigger Clinical LLM Adapter (Gemini 2.5 Flash Lite ZDR)
         setIsGeneratingLLM(true);
-        fetch('http://localhost:8080/api/v1/encounters/process-transcript', {
+        fetch(`${API_BASE}/api/v1/encounters/process-transcript`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -138,7 +139,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
     };
 
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/encounters/${encounterId}/export-pdf`, {
+      const res = await fetch(`${API_BASE}/api/v1/encounters/${encounterId}/export-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
