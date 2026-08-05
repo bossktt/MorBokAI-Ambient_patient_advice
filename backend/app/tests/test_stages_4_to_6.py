@@ -117,5 +117,30 @@ class TestStages4To6(unittest.TestCase):
 
         print(f"✅ Screen 5 Passed: PDF {pdf_id} generated with TH Sarabun font and downloaded successfully with 10-min TTL!")
 
+    def test_ed_fallback_patterns(self):
+        """
+        Verify all 8 ED Chief Complaint fallback patterns + 1 default fallback condition.
+        """
+        from app.services.llm_adapter import GeminiAdapter
+
+        test_cases = [
+            ("แน่นหน้าอก หัวใจ", "Angina Pectoris"),
+            ("ปวดท้อง อาเจียน ถ่ายเหลว", "Acute Gastroenteritis"),
+            ("เวียนหัว ความดันสูง ปวดศีรษะ", "Hypertensive Urgency"),
+            ("หอบเหนื่อย หายใจไม่สะดวก หอบหืด", "Acute Asthma Exacerbation"),
+            ("มีไข้สูง เจ็บคอ หนาวสั่น", "Common Cold"),
+            ("เบาหวาน น้ำตาลในเลือดสูง", "Uncontrolled Diabetes Mellitus"),
+            ("อุบัติเหตุ มีแผล เลือดออก", "Laceration Wound"),
+            ("ผื่นคัน แพ้ยา แพ้อาหาร", "Acute Urticaria"),
+            ("อาการทั่วไปอื่นๆ", "Hypertensive Urgency with Hyperglycemia") # Default fallback
+        ]
+
+        for prompt, expected_keyword in test_cases:
+            summary = GeminiAdapter._fallback_demo_summary(prompt)
+            self.assertIn("patient_view", summary)
+            self.assertIn("diagnosis", summary["patient_view"])
+            self.assertIn(expected_keyword, summary["patient_view"]["diagnosis"])
+        print("✅ Passed: All 8 ED Chief Complaint patterns + 1 default fallback condition verified successfully!")
+
 if __name__ == "__main__":
     unittest.main()
