@@ -37,7 +37,7 @@ import redis
 from app.core.config import settings
 from app.services.deid_engine import DeIdentificationEngine
 from app.services.llm_adapter import get_llm_adapter
-from app.services.asr_service import TyphoonASRService
+from app.services.asr_service import MultiTierASRService
 from app.services.pdf_service import PDFService
 
 app = FastAPI(
@@ -375,7 +375,7 @@ async def audio_stream_endpoint(websocket: WebSocket, encounter_id: str):
             audio_buffer.extend(data)
     except WebSocketDisconnect:
         # Transcribe audio buffer using Typhoon ASR Realtime model
-        raw_speech = TyphoonASRService.transcribe_audio_bytes(bytes(audio_buffer))
+        raw_speech = MultiTierASRService.transcribe_audio_bytes(bytes(audio_buffer))
 
         session_meta = {
             "patient_name": "ผู้ป่วย",
