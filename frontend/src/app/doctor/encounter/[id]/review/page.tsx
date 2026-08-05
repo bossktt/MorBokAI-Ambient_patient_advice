@@ -99,7 +99,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
   // Instruction Handlers
   const handleAddInstruction = () => {
-    setInstructions((prev) => [...prev, 'ข้อแนะนำเพิ่มเติมสำหรับการดูแลตนเอง']);
+    setInstructions((prev) => [...prev, '']);
   };
   const handleRemoveInstruction = (index: number) => {
     setInstructions((prev) => prev.filter((_, i) => i !== index));
@@ -107,21 +107,21 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
   // Med Handlers
   const handleAddStartMed = () => {
-    setStartMeds((prev) => [...prev, { name: 'ยาเริ่มใหม่ระบุชื่อ', desc: 'ลักษณะยา', usage: 'วิธีทาน' }]);
+    setStartMeds((prev) => [...prev, { name: '', desc: '', usage: '' }]);
   };
   const handleRemoveStartMed = (index: number) => {
     setStartMeds((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleAddStopMed = () => {
-    setStopMeds((prev) => [...prev, { name: 'ยาที่ต้องหยุด', desc: 'ซองเดิม', warning: '⚠️ ทิ้งถังขยะทันที' }]);
+    setStopMeds((prev) => [...prev, { name: '', desc: '', warning: '' }]);
   };
   const handleRemoveStopMed = (index: number) => {
     setStopMeds((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleAddChangeMed = () => {
-    setChangeMeds((prev) => [...prev, { name: 'ยาปรับขนาด', desc: 'ลักษณะเม็ดยา', change: 'ขนาดวิธีทานใหม่' }]);
+    setChangeMeds((prev) => [...prev, { name: '', desc: '', change: '' }]);
   };
   const handleRemoveChangeMed = (index: number) => {
     setChangeMeds((prev) => prev.filter((_, i) => i !== index));
@@ -286,12 +286,13 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
                   <input
                     type="text"
                     value={inst}
+                    placeholder="ระบุข้อแนะนำการดูแลตนเอง..."
                     onChange={(e) => {
                       const newInst = [...instructions];
                       newInst[idx] = e.target.value;
                       setInstructions(newInst);
                     }}
-                    className="w-full bg-white border border-[#C3C6D1] rounded-lg px-2.5 py-1.5 text-xs text-[#111C2C] focus:ring-1 focus:ring-[#006D33] font-medium"
+                    className="w-full bg-white border border-[#C3C6D1] rounded-lg px-2.5 py-1.5 text-xs text-[#111C2C] focus:ring-1 focus:ring-[#006D33] font-medium placeholder:text-slate-400"
                   />
                   <button
                     type="button"
@@ -380,7 +381,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
                           updated[idx].name = e.target.value;
                           setStopMeds(updated);
                         }}
-                        className="font-bold text-xs w-full text-[#BA1A1A] bg-[#fff5f5] border border-red-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#BA1A1A]"
+                        className="font-bold text-xs w-full text-[#BA1A1A] bg-[#fff5f5] border border-red-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#BA1A1A] placeholder:text-red-300"
                       />
                     </div>
                     <button type="button" onClick={() => handleRemoveStopMed(idx)} className="text-red-500 text-xs shrink-0 cursor-pointer font-bold hover:bg-red-50 p-1 rounded">✕</button>
@@ -390,14 +391,14 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
                     <span className="text-[10px] text-red-600 font-semibold block mb-0.5">ลักษณะยา / คำเตือน / คำสั่งหยุด:</span>
                     <input
                       type="text"
-                      value={med.warning || med.desc || ''}
-                      placeholder="เช่น ยาเม็ดเล็กสีขาวซองเดิม — หยิบทิ้งถังขยะทันที ห้ามทานซ้ำ"
+                      value={med.warning !== undefined ? med.warning : (med.desc || '')}
+                      placeholder="หยุดใช้ยาทันที"
                       onChange={(e) => {
                         const updated = [...stopMeds];
                         updated[idx].warning = e.target.value;
                         setStopMeds(updated);
                       }}
-                      className="w-full bg-[#fff5f5] border border-red-200 rounded-lg px-2.5 py-1.5 text-xs text-red-700 font-bold focus:outline-none focus:ring-1 focus:ring-[#BA1A1A]"
+                      className="w-full bg-[#fff5f5] border border-red-200 rounded-lg px-2.5 py-1.5 text-xs text-red-700 font-bold focus:outline-none focus:ring-1 focus:ring-[#BA1A1A] placeholder:text-red-300"
                     />
                   </div>
                 </div>

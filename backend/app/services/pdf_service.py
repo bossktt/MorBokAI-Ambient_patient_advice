@@ -501,10 +501,12 @@ class PDFService:
                 pdf.set_xy(36, med_y)
                 pdf.cell(4, 5, "*")
                 pdf.set_xy(40, med_y)
+                if not warning and not desc:
+                    warning = "หยุดใช้ยาทันที"
                 if desc and warning:
                     text_str = f"{name} ({desc}) -> {warning}"
                 elif warning:
-                    text_str = f"{name} -> {warning}"
+                    text_str = f"{name} -> {warning}" if name else warning
                 elif desc:
                     text_str = f"{name} ({desc})"
                 else:
