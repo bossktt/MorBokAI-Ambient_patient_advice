@@ -198,7 +198,7 @@ export default function NewEncounterPage() {
               className="mt-0.5 w-4 h-4 text-[#006d33] rounded focus:ring-[#006d33] shrink-0 cursor-pointer"
             />
             <span className="text-[12px] text-[#111c2c] leading-relaxed">
-              ผู้ป่วย/ผู้ดูแลยินยอมให้บันทึกเสียงบทสนทนาขณะตรวจ (ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล PDPA มาตรา 26/37)
+              ผู้ป่วย/ผู้ดูแลยินยอมให้ใช้ระบบ AI สรุปคำแนะนำทางการแพทย์ (ตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล PDPA มาตรา 26/37)
             </span>
           </label>
 
@@ -233,8 +233,8 @@ export default function NewEncounterPage() {
                 : 'bg-slate-300 text-slate-500 cursor-not-allowed'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px]">mic</span>
-            Start Ambient Session (เริ่มอัดเสียง)
+            <span className="material-symbols-outlined text-[20px]">edit_note</span>
+            Start Scribe Session (เริ่มกรอกบทสนทนา)
           </button>
 
         </div>

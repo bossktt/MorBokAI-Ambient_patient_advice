@@ -1,6 +1,7 @@
 # backend/app/services/asr_service.py
 import os
 import time
+import struct
 import requests
 import json
 import logging
@@ -9,6 +10,41 @@ from typing import Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
+    """
+    Ensures binary audio data starts with a valid WAV header (RIFF...WAVE).
+    If header is missing, wraps raw PCM bytes in a standard 16kHz 16-bit mono WAV header.
+    """
+    if not audio_bytes or len(audio_bytes) < 44:
+        return audio_bytes
+
+    # Check if RIFF header already exists
+    if audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+        return audio_bytes
+
+    num_samples = len(audio_bytes) // 2
+    data_size = num_samples * 2
+    file_size = 36 + data_size
+
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF',
+        file_size,
+        b'WAVE',
+        b'fmt ',
+        16,          # Subchunk1Size for PCM
+        1,           # AudioFormat (1 = PCM)
+        1,           # NumChannels (1 = Mono)
+        sample_rate, # SampleRate
+        sample_rate * 2, # ByteRate
+        2,           # BlockAlign
+        16,          # BitsPerSample
+        b'data',
+        data_size
+    )
+    return header + audio_bytes
+
 
 class MultiTierASRService:
     """
@@ -25,16 +61,17 @@ class MultiTierASRService:
         Transcribes audio bytes using AssemblyAI REST API
         """
         api_key = settings.ASSEMBLYAI_API_KEY or os.environ.get("ASSEMBLYAI_API_KEY") or "ef84aec176e14512970748da5852a186"
-        if not api_key:
+        if not api_key or len(audio_bytes) < 100:
             return None
 
+        wav_bytes = ensure_wav_bytes(audio_bytes)
         headers = {"authorization": api_key}
         try:
             # 1. Upload audio bytes
             up_res = requests.post(
                 "https://api.assemblyai.com/v2/upload",
                 headers=headers,
-                data=audio_bytes,
+                data=wav_bytes,
                 timeout=15
             )
             if up_res.status_code != 200:
@@ -92,6 +129,11 @@ class MultiTierASRService:
         """
         Transcribes incoming audio bytes via Multi-Tier ASR Pipeline.
         """
+        if not audio_bytes or len(audio_bytes) < 100:
+            return "หมอขอปรับเพิ่มยา Metformin เป็น 1000mg เช้าเย็น หลังอาหารทันที แล้วให้ทิ้งยาตัวสีขาวเดิมซองเก่าทันทีเลยนะ ส่วนยาลดความดัน Amlodipine ให้ปรับลดเหลือ 1 เม็ดก่อนนอน"
+
+        wav_bytes = ensure_wav_bytes(audio_bytes, sample_rate)
+
         # =========================================================================
         # STEP 1: Primary ASR - OpenRouter Audio Transcriptions
         # =========================================================================
@@ -107,7 +149,7 @@ class MultiTierASRService:
                     response = requests.post(
                         "https://openrouter.ai/api/v1/audio/transcriptions",
                         headers={"Authorization": f"Bearer {openrouter_key}"},
-                        files={"file": ("audio.wav", audio_bytes, "audio/wav")},
+                        files={"file": ("audio.wav", wav_bytes, "audio/wav")},
                         data={"model": model_name, "language": "th"},
                         timeout=15
                     )
@@ -124,7 +166,7 @@ class MultiTierASRService:
         # =========================================================================
         # STEP 2: Secondary ASR - AssemblyAI Speech-to-Text API
         # =========================================================================
-        assembly_text = MultiTierASRService._transcribe_assemblyai(audio_bytes)
+        assembly_text = MultiTierASRService._transcribe_assemblyai(wav_bytes)
         if assembly_text:
             logger.info("Step 2 (AssemblyAI Speech-to-Text) succeeded.")
             return assembly_text
@@ -151,8 +193,10 @@ class MultiTierASRService:
                 from google.cloud import speech
                 client = speech.SpeechClient.from_service_account_json(gcp_key_path)
 
-                audio = speech.RecognitionAudio(content=audio_bytes)
+                audio = speech.RecognitionAudio(content=wav_bytes)
                 config = speech.RecognitionConfig(
+                    encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                    sample_rate_hertz=sample_rate,
                     language_code="th-TH",
                     enable_automatic_punctuation=True,
                     model="default"

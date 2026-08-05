@@ -7,7 +7,7 @@ from typing import Optional
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 ROOT_ENV = os.path.join(BASE_DIR, ".env")
 
-# Set PyThaiNLP data directory within the project workspace to avoid permission errors
+# Set PyThaiNLP data directory
 os.environ["PYTHAINLP_DATA_DIR"] = os.path.join(BASE_DIR, "backend", "pythainlp_data")
 
 class Settings(BaseSettings):
@@ -20,42 +20,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://pvs_admin:SecretPassword123@localhost:5432/pvs_db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ASR Multi-Tier Pipeline Configuration
-    PRIMARY_ASR_ENGINE: str = "google-speech"      # Step 1 Primary: Google Speech-to-Text (via gcp-key.json)
-    GCP_KEY_PATH: str = "gcp-key.json"             # Path to GCP credentials file
-
-    SECONDARY_ASR_ENGINE: str = "typhoon-asr"       # Step 2 Secondary: Local Typhoon ASR Realtime
-    TYPHOON_ASR_MODEL: str = "bossktt/typhoon-asr-realtime-bucket"
-    TYPHOON_ASR_API_KEY: Optional[str] = None
-    TYPHOON_API_KEY: Optional[str] = None
-    ASR_TYPHOON_HOST: str = "http://localhost:8000"
-    TYPHOON_ASR_WEBSOCKET_URL: str = "wss://api.opn.ai/v1/audio/transcriptions/realtime"
-
-    WHISPER_MODEL: str = "Systran/faster-whisper-small"
-    ASR_WHISPER_HOST: str = "http://localhost:8001"
-    HF_TOKEN: Optional[str] = None
-
-    ASSEMBLYAI_API_KEY: Optional[str] = None
-
-    # Clinical LLM Adapter Configuration
-    DEFAULT_LLM_PROVIDER: str = "openrouter"      # Primary: OpenRouter (Gemini via API)
+    # Clinical LLM Adapter
+    DEFAULT_LLM_PROVIDER: str = "openrouter"
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
-    OPENROUTER_PROVIDER: Optional[str] = "Google"
 
-    # Gemini AI Studio (direct fallback)
+    # Gemini AI Studio (fallback)
     GEMINI_MODEL: str = "gemini-2.5-flash-lite"
-    GEMINI_API_KEY: Optional[str] = None           # AI Studio API key (AIzaSy...)
+    GEMINI_API_KEY: Optional[str] = None
 
-    # Azure OpenAI (enterprise HIPAA fallback)
-    AZURE_OPENAI_API_KEY: Optional[str] = None
-    AZURE_OPENAI_ENDPOINT: Optional[str] = None
-
-    # LINE OA & LIFF
-    LINE_CHANNEL_SECRET: Optional[str] = None
-    LINE_CHANNEL_ACCESS_TOKEN: Optional[str] = None
-    LINE_LIFF_ID: Optional[str] = None
-    LINE_BASIC_ID: Optional[str] = None
+    # AssemblyAI (ASR fallback for audio pipeline)
+    ASSEMBLYAI_API_KEY: Optional[str] = None
 
     class Config:
         env_file = (ROOT_ENV, ".env")
