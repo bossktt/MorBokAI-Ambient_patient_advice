@@ -1,0 +1,240 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EncounterDraftSchema",
+  "description": "Unified Clinical JSON Data Contract flowing between AI Engine, Doctor Approval Dashboard, LINE OA, and PDF Generator",
+  "type": "object",
+  "required": [
+    "encounter_id",
+    "metadata",
+    "patient_view",
+    "caregiver_matrix",
+    "red_flags",
+    "audio_evidence"
+  ],
+  "properties": {
+    "encounter_id": {
+      "type": "string",
+      "example": "ENC_20260802_9823",
+      "description": "Unique encounter identifier mapped to Redis session and DB record"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "hospital_name",
+        "department",
+        "visit_timestamp",
+        "doctor",
+        "patient",
+        "caregiver"
+      ],
+      "properties": {
+        "hospital_name": {
+          "type": "string",
+          "example": "โรงพยาบาลตัวอย่าง (Sample Hospital)"
+        },
+        "department": {
+          "type": "string",
+          "example": "ห้องฉุกเฉิน (Emergency Department)"
+        },
+        "visit_timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "example": "2026-08-02T11:30:00Z"
+        },
+        "doctor": {
+          "type": "object",
+          "required": ["doctor_id", "full_name", "license_no"],
+          "properties": {
+            "doctor_id": { "type": "string", "example": "DOC_1048" },
+            "full_name": { "type": "string", "example": "นพ. สมชาย ใจดี" },
+            "license_no": { "type": "string", "example": "ว.49281" }
+          }
+        },
+        "patient": {
+          "type": "object",
+          "required": ["patient_name", "hn", "age"],
+          "properties": {
+            "patient_name": { "type": "string", "example": "คุณ[ผู้ป่วย-ปกปิดข้อมูล PDPA]" },
+            "hn": { "type": "string", "example": "65-XXXXXX" },
+            "age": { "type": "integer", "example": 72 },
+            "gender": { "type": "string", "example": "หญิง" }
+          }
+        },
+        "caregiver": {
+          "type": "object",
+          "required": ["caregiver_name", "relationship", "phone_number"],
+          "properties": {
+            "caregiver_name": { "type": "string", "example": "คุณ[ผู้ดูแล-ปกปิดข้อมูล PDPA]" },
+            "relationship": { "type": "string", "example": "ลูกชาย" },
+            "phone_number": { "type": "string", "example": "08X-XXX-XXXX" }
+          }
+        }
+      }
+    },
+    "patient_view": {
+      "type": "object",
+      "required": ["headline", "diagnosis", "key_instructions", "follow_up", "audio_tts_url"],
+      "properties": {
+        "headline": {
+          "type": "string",
+          "example": "สรุปคำแนะนำการดูแลตนเองหลังออกจากห้องฉุกเฉิน (2 ส.ค. 2026)",
+          "description": "Short headline for patient"
+        },
+        "diagnosis": {
+          "type": "string",
+          "example": "ภาวะความดันโลหิตสูงและระดับน้ำตาลในเลือดสูงชั่วคราว (Hypertensive Urgency with Hyperglycemia)",
+          "description": "Clinical diagnosis explained in plain language"
+        },
+        "key_instructions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": [
+            "ทานยาปรับระดับน้ำตาลตัวใหม่ (เม็ดใหญ่สีขาว) เช้า-เย็น หลังอาหารทันที",
+            "ทิ้งยาเม็ดสีขาวตัวเดิมซองเก่าทันที ไม่ต้องทานซ้ำอีกต่อไป",
+            "จิบน้ำสะอาดเรื่อยๆ อย่างน้อยวันละ 8 แก้ว",
+            "งดอาหารรสจัดและของหวานมัน"
+          ],
+          "description": "Plain-language bullet points in 18pt+ high-contrast font"
+        },
+        "follow_up": {
+          "type": "object",
+          "required": ["follow_up_date_thai", "clinic_name", "preparation_instructions"],
+          "properties": {
+            "follow_up_date": { "type": "string", "format": "date-time", "example": "2026-08-16T09:00:00Z" },
+            "follow_up_date_thai": { "type": "string", "example": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น." },
+            "clinic_name": { "type": "string", "example": "คลินิกอายุรกรรมหัวใจและหลอดเลือด (ห้องตรวจ 4)" },
+            "preparation_instructions": {
+              "type": "array",
+              "items": { "type": "string" },
+              "example": [
+                "งดน้ำและอาหารหลังเที่ยงคืนก่อนวันตรวจเพื่อเจาะเลือด",
+                "นำสมุดบันทึกความดันโลหิตและซองยาที่กำลังทานอยู่มาด้วยทุกครั้ง"
+              ]
+            }
+          }
+        },
+        "audio_tts_url": {
+          "type": "string",
+          "example": "https://api.pvs-health.org/media/tts/tts_ENC_9823.mp3",
+          "description": "Pre-generated Text-to-Speech audio link for visual/literacy support"
+        }
+      }
+    },
+    "caregiver_matrix": {
+      "type": "object",
+      "required": ["medication_reconciliation", "daily_home_tasks"],
+      "properties": {
+        "medication_reconciliation": {
+          "type": "object",
+          "required": ["start", "stop", "change", "continue"],
+          "properties": {
+            "start": {
+              "type": "array",
+              "description": "🟢 NEW Prescriptions to START",
+              "items": {
+                "type": "object",
+                "required": ["med_name", "physical_description", "dosage", "timing", "instructions"],
+                "properties": {
+                  "med_name": { "type": "string", "example": "Metformin 1000 mg" },
+                  "physical_description": { "type": "string", "example": "ยาเม็ดใหญ่สีขาว รูปไข่" },
+                  "dosage": { "type": "string", "example": "1 เม็ด" },
+                  "timing": { "type": "string", "example": "เช้า - เย็น" },
+                  "instructions": { "type": "string", "example": "ทานหลังอาหารทันที" }
+                }
+              }
+            },
+            "stop": {
+              "type": "array",
+              "description": "🔴 DISCONTINUED Medications to STOP & DISCARD",
+              "items": {
+                "type": "object",
+                "required": ["med_name", "physical_description", "discard_instruction", "reason"],
+                "properties": {
+                  "med_name": { "type": "string", "example": "Metformin 500 mg (ซองเดิม)" },
+                  "physical_description": { "type": "string", "example": "ยาเม็ดเล็กสีขาว กลม" },
+                  "discard_instruction": { "type": "string", "example": "หยิบทิ้งถังขยะทันที ห้ามนำมารับประทานซ้ำ" },
+                  "reason": { "type": "string", "example": "ปรับเพิ่มขนาดเป็นยาตัวใหม่แล้ว" }
+                }
+              }
+            },
+            "change": {
+              "type": "array",
+              "description": "🟡 ADJUSTED Dosage or Timing",
+              "items": {
+                "type": "object",
+                "required": ["med_name", "physical_description", "new_dosage", "timing", "change_summary"],
+                "properties": {
+                  "med_name": { "type": "string", "example": "Amlodipine 5 mg" },
+                  "physical_description": { "type": "string", "example": "ยาลดความดัน เม็ดสีเหลืองกลม" },
+                  "new_dosage": { "type": "string", "example": "1 เม็ด (วันละ 1 ครั้ง)" },
+                  "timing": { "type": "string", "example": "ก่อนนอน" },
+                  "change_summary": { "type": "string", "example": "ปรับลดจากเดิมวันละ 2 เม็ด เหลือ 1 เม็ดก่อนนอน" }
+                }
+              }
+            },
+            "continue": {
+              "type": "array",
+              "description": "🔵 UNCHANGED Regular Home Medications",
+              "items": {
+                "type": "object",
+                "required": ["med_name", "physical_description", "dosage", "timing"],
+                "properties": {
+                  "med_name": { "type": "string", "example": "Aspirin 81 mg" },
+                  "physical_description": { "type": "string", "example": "ยาเม็ดเล็กสีชมพู เคลือบแป้ง" },
+                  "dosage": { "type": "string", "example": "1 เม็ด" },
+                  "timing": { "type": "string", "example": "หลังอาหารเช้า" }
+                }
+              }
+            }
+          }
+        },
+        "daily_home_tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": [
+            "วัดความดันโลหิตทุกเช้าหลังตื่นนอน และจดบันทึกไว้ในสมุด",
+            "สังเกตแผลที่เท้า รักษาสะอาดและแห้งอยู่เสมอ"
+          ]
+        }
+      }
+    },
+    "red_flags": {
+      "type": "object",
+      "required": ["emergency_warnings", "hotline_call_trigger"],
+      "properties": {
+        "emergency_warnings": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": [
+            "มีอาการเจ็บแน่นหน้าผากอย่างรุนแรง เหมือนมีของหนักทับ",
+            "หน้ามืด วูบ เป็นลม ใจสั่น เหงื่อออกตัวเย็นซึม",
+            "แขนขาอ่อนแรงครึ่งซีก ปากเปี้ยว พูดไม่ชัดฉับพลัน"
+          ],
+          "description": "High-priority emergency return triggers"
+        },
+        "hotline_call_trigger": {
+          "type": "object",
+          "required": ["national_emergency_number", "hospital_direct_number"],
+          "properties": {
+            "national_emergency_number": { "type": "string", "example": "1669" },
+            "hospital_direct_number": { "type": "string", "example": "02-XXX-XXXX ต่อ ER" }
+          }
+        }
+      }
+    },
+    "audio_evidence": {
+      "type": "array",
+      "description": "Linked audio evidence mapping each instruction to [mm:ss] clip for doctor audit",
+      "items": {
+        "type": "object",
+        "required": ["section_key", "timestamp_start", "timestamp_end", "audio_clip_url"],
+        "properties": {
+          "section_key": { "type": "string", "example": "medication_reconciliation.stop[0]" },
+          "timestamp_start": { "type": "string", "example": "01:42" },
+          "timestamp_end": { "type": "string", "example": "01:58" },
+          "audio_clip_url": { "type": "string", "example": "https://api.pvs-health.org/media/clips/clip_0142_0158.mp3" }
+        }
+      }
+    }
+  }
+}

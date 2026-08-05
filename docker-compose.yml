@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pvs_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pvs_db}
+      POSTGRES_USER: ${POSTGRES_USER:-pvs_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SecretPassword123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: pvs_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # Step 1 Primary ASR: Typhoon ASR Realtime (typhoon-ai/typhoon-asr-realtime)
+  typhoon-asr-realtime:
+    image: ghcr.io/huggingface/text-generation-inference:latest
+    container_name: pvs_typhoon_asr
+    restart: always
+    environment:
+      - MODEL_ID=${TYPHOON_ASR_MODEL:-bossktt/typhoon-asr-realtime-bucket}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+      - TYPHOON_API_KEY=${TYPHOON_ASR_API_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+
+  # Step 2 Secondary Fallback ASR: Faster-Whisper (Systran/faster-whisper-small)
+  faster-whisper-asr:
+    image: fedirz/faster-whisper-server:latest-cuda
+    container_name: pvs_whisper_asr
+    restart: always
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-Systran/faster-whisper-small}
+    ports:
+      - "8001:8000"
+
+  fastapi-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pvs_backend
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-pvs_admin}:${POSTGRES_PASSWORD:-SecretPassword123}@postgres:5432/${POSTGRES_DB:-pvs_db}
+      - REDIS_URL=redis://redis:6379/0
+      - PRIMARY_ASR_ENGINE=${PRIMARY_ASR_ENGINE:-typhoon-asr}
+      - SECONDARY_ASR_ENGINE=${SECONDARY_ASR_ENGINE:-faster-whisper}
+      - TYPHOON_ASR_MODEL=${TYPHOON_ASR_MODEL:-typhoon-ai/typhoon-asr-realtime}
+      - TYPHOON_ASR_API_KEY=${TYPHOON_ASR_API_KEY}
+      - ASR_TYPHOON_HOST=http://typhoon-asr-realtime:8000
+      - ASR_WHISPER_HOST=http://faster-whisper-asr:8000
+    depends_on:
+      - postgres
+      - redis
+      - typhoon-asr-realtime
+      - faster-whisper-asr
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pvs_celery_worker
+    restart: always
+    command: celery -A app.workers.celery_tasks worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-pvs_admin}:${POSTGRES_PASSWORD:-SecretPassword123}@postgres:5432/${POSTGRES_DB:-pvs_db}
+      - REDIS_URL=redis://redis:6379/0
+      - PRIMARY_ASR_ENGINE=${PRIMARY_ASR_ENGINE:-typhoon-asr}
+      - SECONDARY_ASR_ENGINE=${SECONDARY_ASR_ENGINE:-faster-whisper}
+      - TYPHOON_ASR_MODEL=${TYPHOON_ASR_MODEL:-typhoon-ai/typhoon-asr-realtime}
+      - TYPHOON_ASR_API_KEY=${TYPHOON_ASR_API_KEY}
+      - ASR_TYPHOON_HOST=http://typhoon-asr-realtime:8000
+      - ASR_WHISPER_HOST=http://faster-whisper-asr:8000
+    depends_on:
+      - redis
+      - typhoon-asr-realtime
+      - faster-whisper-asr
+
+  nextjs-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pvs_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_HOST=localhost:8080
+
+volumes:
+  pgdata:

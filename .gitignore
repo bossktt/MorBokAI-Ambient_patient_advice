@@ -1,0 +1,67 @@
+# =============================================================================
+# MorBok AI (.gitignore)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Environment & Secrets (NEVER COMMIT API KEYS OR CREDENTIALS)
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+gcp-key.json
+*.pem
+*.key
+*.p12
+
+# -----------------------------------------------------------------------------
+# Python & Backend Dependencies
+# -----------------------------------------------------------------------------
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+backend/pythainlp_data/
+backend/app/temp_pdfs/
+*.pdf
+
+# -----------------------------------------------------------------------------
+# Node.js & Frontend Build Artifacts
+# -----------------------------------------------------------------------------
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+build/
+dist/
+.next/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# -----------------------------------------------------------------------------
+# Operating System & IDE Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp

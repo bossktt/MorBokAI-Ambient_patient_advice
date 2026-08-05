@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>MorBok - Ambient Voice Recording</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#799dd6",
+                        "surface-tint": "#3a5f94",
+                        "inverse-primary": "#a7c8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-on-surface": "#ebf1ff",
+                        "on-secondary-fixed": "#00210b",
+                        "surface-container-low": "#f0f3ff",
+                        "surface-container-high": "#dee8ff",
+                        "on-error": "#ffffff",
+                        "primary-container": "#003366",
+                        "background": "#f9f9ff",
+                        "tertiary-fixed-dim": "#c3c7cb",
+                        "on-secondary-container": "#007236",
+                        "primary-fixed": "#d5e3ff",
+                        "secondary-fixed-dim": "#5adf82",
+                        "outline": "#737780",
+                        "secondary-fixed": "#78fc9c",
+                        "tertiary": "#1a1f22",
+                        "tertiary-fixed": "#dfe3e7",
+                        "error": "#ba1a1a",
+                        "primary-fixed-dim": "#a7c8ff",
+                        "on-secondary": "#ffffff",
+                        "primary": "#001e40",
+                        "on-secondary-fixed-variant": "#005225",
+                        "secondary": "#006d33",
+                        "tertiary-container": "#2f3437",
+                        "on-primary-fixed": "#001b3c",
+                        "on-tertiary-fixed": "#171c1f",
+                        "on-tertiary-fixed-variant": "#43474b",
+                        "on-primary": "#ffffff",
+                        "on-surface": "#111c2c",
+                        "on-primary-fixed-variant": "#1f477b",
+                        "surface-variant": "#d8e3fa",
+                        "surface-bright": "#f9f9ff",
+                        "outline-variant": "#c3c6d1",
+                        "surface": "#f9f9ff",
+                        "on-error-container": "#93000a",
+                        "on-background": "#111c2c",
+                        "surface-dim": "#cfdaf1",
+                        "on-surface-variant": "#43474f",
+                        "inverse-surface": "#263142",
+                        "surface-container": "#e7eeff",
+                        "on-tertiary-container": "#989ca0",
+                        "error-container": "#ffdad6",
+                        "on-tertiary": "#ffffff",
+                        "secondary-container": "#75f999",
+                        "surface-container-highest": "#d8e3fa"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "max-width-mobile": "480px",
+                        "gutter-mobile": "16px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "xl": "32px",
+                        "margin-mobile": "20px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Manrope"],
+                        "headline-md": ["Manrope"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Manrope"],
+                        "label-caps": ["Inter"],
+                        "label-bold": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "headline-lg": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "label-bold": ["14px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .pulse-ring {
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            80%, 100% { opacity: 0; }
+        }
+        .waveform-bar {
+            animation: waveform 1s ease-in-out infinite alternate;
+        }
+        @keyframes waveform {
+            0% { height: 20%; }
+            100% { height: 100%; }
+        }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline flat no shadows">
+<div class="flex justify-between items-center px-margin-mobile h-14 w-full max-w-max-width-mobile mx-auto">
+<div class="flex items-center gap-2 hover:opacity-80 transition-opacity active:scale-95 transition-transform cursor-pointer">
+<span class="material-symbols-outlined text-primary dark:text-inverse-primary font-headline-md text-headline-md" style="font-variation-settings: 'FILL' 1;">medical_services</span>
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary">MorBok</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant dark:text-surface-variant">
+<span class="material-symbols-outlined hover:opacity-80 transition-opacity active:scale-95 transition-transform cursor-pointer">more_vert</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col items-center justify-center px-margin-mobile py-lg max-w-max-width-mobile mx-auto w-full pb-32">
+<!-- Status Area -->
+<div class="flex flex-col items-center mb-xl text-center">
+<div class="bg-surface-container-low border border-outline-variant rounded-full px-4 py-2 flex items-center gap-2 mb-lg shadow-sm">
+<div class="w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<span class="font-label-bold text-label-bold text-on-surface">Recording Session</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant ml-2">02:45</span>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary mb-2">Listening to doctor's advice...</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-[280px]">Ensure you speak clearly. MorBok is actively transcribing the session.</p>
+</div>
+<!-- Central Recording Interaction -->
+<div class="relative flex items-center justify-center w-64 h-64 mb-xl">
+<!-- Pulsing Rings -->
+<div class="absolute inset-0 rounded-full border-4 border-secondary/20 pulse-ring delay-1"></div>
+<div class="absolute inset-4 rounded-full border-4 border-secondary/40 pulse-ring delay-3"></div>
+<!-- Main Button -->
+<button class="relative z-10 w-32 h-32 rounded-full bg-secondary text-on-secondary shadow-[0_8px_24px_rgba(0,109,51,0.25)] flex items-center justify-center transition-transform hover:scale-105 active:scale-95 group">
+<span class="material-symbols-outlined text-[48px] group-hover:scale-110 transition-transform duration-300" style="font-variation-settings: 'FILL' 1;">mic</span>
+</button>
+<!-- Abstract Waveform Visualization -->
+<div class="absolute -bottom-8 flex items-end gap-1 h-12 w-48 justify-center opacity-60">
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-1 h-[40%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-3 h-[70%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-5 h-[100%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-2 h-[60%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-4 h-[80%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-1 h-[30%]"></div>
+<div class="w-1.5 bg-primary-container rounded-t-full waveform-bar delay-3 h-[90%]"></div>
+</div>
+</div>
+<!-- Controls -->
+<div class="flex items-center gap-lg mt-md">
+<button class="w-14 h-14 rounded-full border-2 border-primary-container text-primary-container flex items-center justify-center hover:bg-surface-container-low transition-colors active:scale-95 shadow-sm">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">pause</span>
+</button>
+<button class="w-14 h-14 rounded-full bg-error text-on-error flex items-center justify-center hover:bg-on-error-container transition-colors active:scale-95 shadow-sm">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">stop</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-surface dark:bg-inverse-surface shadow-[0_-4px_12px_rgba(0,51,102,0.08)]">
+<div class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-2 pb-safe-area max-w-max-width-mobile mx-auto right-0">
+<!-- Verify -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-surface-variant p-2 hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors active:scale-90 transition-transform duration-200">
+<span class="material-symbols-outlined mb-1">lock_person</span>
+<span class="font-label-bold text-label-bold">Verify</span>
+</button>
+<!-- Record (Active) -->
+<button class="flex flex-col items-center justify-center bg-secondary-container dark:bg-on-secondary-fixed-variant text-on-secondary-container dark:text-secondary-fixed rounded-full px-4 py-1 hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors active:scale-90 transition-transform duration-200">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">mic</span>
+<span class="font-label-bold text-label-bold">Record</span>
+</button>
+<!-- Review -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-surface-variant p-2 hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors active:scale-90 transition-transform duration-200">
+<span class="material-symbols-outlined mb-1">description</span>
+<span class="font-label-bold text-label-bold">Review</span>
+</button>
+<!-- Report -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-surface-variant p-2 hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors active:scale-90 transition-transform duration-200">
+<span class="material-symbols-outlined mb-1">picture_as_pdf</span>
+<span class="font-label-bold text-label-bold">Report</span>
+</button>
+</div>
+</nav>
+</body></html>
