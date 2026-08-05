@@ -22,6 +22,13 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const isPausedRef = useRef(false);
+  const isStoppedRef = useRef(false);
+
+  // Keep isPaused in sync for stale-closure-free handlers
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   // Load Doctor Info
   useEffect(() => {
@@ -61,7 +68,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
-            if (!isPaused && event.data.size > 0 && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            if (!isPausedRef.current && event.data.size > 0 && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
               wsRef.current.send(event.data);
             }
           };
@@ -79,20 +86,42 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'th-TH';
+      recognition.maxAlternatives = 1;
 
       recognition.onresult = (event: any) => {
-        if (isPaused) return;
+        if (isPausedRef.current) return;
         let currentTranscript = '';
         for (let i = 0; i < event.results.length; i++) {
           currentTranscript += event.results[i][0].transcript + ' ';
         }
-        setTranscript(currentTranscript);
+        setTranscript(currentTranscript.trim());
+      };
+
+      // Android Chrome auto-stops after a few seconds of silence.
+      // Restart unless explicitly paused/stopped — otherwise recording
+      // appears live but nothing is transcribed.
+      recognition.onend = () => {
+        if (!isPausedRef.current && !isStoppedRef.current) {
+          try {
+            recognition.start();
+          } catch (err) {
+            console.warn('SpeechRecognition restart failed:', err);
+          }
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        // 'no-speech' / 'aborted' are expected on silence/stop — ignore them.
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
+        console.warn('SpeechRecognition error:', event.error);
       };
 
       try {
         recognition.start();
         recognitionRef.current = recognition;
-      } catch (err) {}
+      } catch (err) {
+        console.warn('SpeechRecognition start failed:', err);
+      }
     }
 
     return () => {
@@ -111,6 +140,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const handleTogglePause = () => {
     setIsPaused((prev) => {
       const nextState = !prev;
+      isPausedRef.current = nextState;
       if (nextState) {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           try { mediaRecorderRef.current.pause(); } catch (e) {}
@@ -144,6 +174,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
   const handleStopScribe = () => {
     setIsRecording(false);
+    isStoppedRef.current = true;
     setIsProcessing(true);
     if (recognitionRef.current) {
       try {
