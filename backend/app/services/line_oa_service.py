@@ -19,6 +19,15 @@ class LineOAService:
         Builds and dispatches the LINE Flex Message matching line_flex_and_pdf_design_spec.md
         """
         token = cls.get_channel_token()
+
+        # Format Dynamic Medication reconciliation lists from summary_data
+        start_meds_list = summary_data.get("startMeds") or []
+        stop_meds_list = summary_data.get("stopMeds") or []
+        change_meds_list = summary_data.get("changeMeds") or []
+
+        start_text = "\n".join([f"• {m.get('name', '')} ({m.get('desc', '')})\n  {m.get('usage', '')}".strip() for m in start_meds_list]) if start_meds_list else "ไม่มีรายการยาเริ่มใหม่"
+        stop_text = "\n".join([f"• {m.get('name', '')} ({m.get('desc', '')})\n  {m.get('warning', '')}".strip() for m in stop_meds_list]) if stop_meds_list else "ไม่มีรายการยาที่ต้องหยุด"
+        change_text = "\n".join([f"• {m.get('name', '')} ({m.get('desc', '')})\n  {m.get('change', '')}".strip() for m in change_meds_list]) if change_meds_list else "ไม่มีรายการยาปรับขนาด"
         
         # Build Flex Message JSON Container
         flex_contents = {
@@ -116,7 +125,7 @@ class LineOAService:
                             },
                             {
                                 "type": "text",
-                                "text": "Metformin 1000mg (ยาเม็ดใหญ่สีขาว รูปไข่)\nทาน 1 เม็ด เช้า-เย็น หลังอาหารทันที",
+                                "text": start_text,
                                 "wrap": True,
                                 "color": "#137333",
                                 "size": "xs",
@@ -141,7 +150,7 @@ class LineOAService:
                             },
                             {
                                 "type": "text",
-                                "text": "Metformin 500mg (ยาเม็ดเล็กสีขาวซองเดิม)\n⚠️ หยิบทิ้งถังขยะทันที ห้ามนำมารับประทานซ้ำ!",
+                                "text": stop_text,
                                 "wrap": True,
                                 "color": "#C5221F",
                                 "size": "xs",
@@ -166,7 +175,7 @@ class LineOAService:
                             },
                             {
                                 "type": "text",
-                                "text": "Amlodipine 5mg (ยาลดความดัน เม็ดสีเหลือง)\nปรับลดเหลือ 1 เม็ด ก่อนนอน (จากเดิม 2 เม็ด)",
+                                "text": change_text,
                                 "wrap": True,
                                 "color": "#B06000",
                                 "size": "xs",
