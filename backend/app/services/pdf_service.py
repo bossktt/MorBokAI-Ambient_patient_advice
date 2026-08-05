@@ -401,9 +401,9 @@ class PDFService:
         y_pos += 5
 
         # ----------------------------------------------------
-        # SECTION 2: Patient Advice
+        # SECTION 2: Medical Instruction
         # ----------------------------------------------------
-        y_pos = draw_section_header("2", "icon_advice.png", "คำแนะนำการดูแลตนเอง (Patient Advice)", y_pos)
+        y_pos = draw_section_header("2", "icon_advice.png", "คำแนะนำการดูแลตนเอง (Medical instruction)", y_pos)
         instructions = summary_data.get("instructions", [])
         
         pdf.set_text_color(*DARK_TEXT)
@@ -425,9 +425,9 @@ class PDFService:
         y_pos += 5
 
         # ----------------------------------------------------
-        # SECTION 3: Medication Matrix
+        # SECTION 3: Medication
         # ----------------------------------------------------
-        y_pos = draw_section_header("3", "icon_meds.png", "ตารางจัดบริหารยา (Medication Matrix)", y_pos)
+        y_pos = draw_section_header("3", "icon_meds.png", "ตารางจัดบริหารยา (Medication)", y_pos)
         
         start_meds = summary_data.get("startMeds", [])
         stop_meds = summary_data.get("stopMeds", [])

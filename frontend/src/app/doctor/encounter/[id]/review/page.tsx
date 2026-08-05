@@ -268,7 +268,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             <div className="flex justify-between items-center border-b border-[#C3C6D1]/60 pb-2.5">
               <div className="flex items-center gap-2 text-[#003366]">
                 <span className="material-symbols-outlined text-xl">person</span>
-                <h2 className="font-bold text-sm text-[#001E40]">2. คำแนะนำการดูแลตนเอง (สำหรับผู้ป่วย)</h2>
+                <h2 className="font-bold text-sm text-[#001E40]">2. คำแนะนำการดูแลตนเอง (Medical instruction)</h2>
               </div>
               <button
                 type="button"
@@ -310,7 +310,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             <div className="flex justify-between items-center border-b border-[#C3C6D1]/60 pb-2.5">
               <div className="flex items-center gap-2 text-[#003366]">
                 <span className="material-symbols-outlined text-xl">pill</span>
-                <h2 className="font-bold text-sm text-[#001E40]">3. ตารางจัดบริหารยา (Medication Matrix)</h2>
+                <h2 className="font-bold text-sm text-[#001E40]">3. ตารางจัดบริหารยา (Medication)</h2>
               </div>
             </div>
 
