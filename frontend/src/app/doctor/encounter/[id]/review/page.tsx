@@ -46,6 +46,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [changeMeds, setChangeMeds] = useState<{ name: string; desc: string; change: string }[]>([]);
 
   const [followUpDate, setFollowUpDate] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false);
 
@@ -138,12 +139,17 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       followUpDate
     };
 
+    const finalDoctorInfo = {
+      ...doctorInfo,
+      is_anonymous: isAnonymous,
+    };
+
     try {
       const res = await fetch(`${API_BASE}/api/v1/encounters/${encounterId}/export-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          doctor_info: doctorInfo,
+          doctor_info: finalDoctorInfo,
           summary_data: summaryData
         })
       });
@@ -195,11 +201,17 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         <div className="bg-gradient-to-r from-[#001e40] to-[#003366] text-white rounded-2xl p-4 shadow-md flex items-center justify-between">
           <div className="space-y-0.5 text-left">
             <div className="text-xs text-slate-300 font-bold uppercase tracking-wide">แพทย์ผู้ยืนยันโน้ต</div>
-            <div className="text-base font-extrabold">นพ./พญ. {doctorInfo.first_name} {doctorInfo.surname}</div>
-            <div className="text-xs text-slate-200">เลขประกอบวิชาชีพ: <span className="font-mono font-bold text-[#75f999]">{doctorInfo.license_no}</span></div>
+            <div className="text-base font-extrabold">
+              {isAnonymous ? 'ไม่ระบุชื่อ (Anonymous)' : `นพ./พญ. ${doctorInfo.first_name} ${doctorInfo.surname}`}
+            </div>
+            <div className="text-xs text-slate-200">
+              เลขประกอบวิชาชีพ: <span className="font-mono font-bold text-[#75f999]">{isAnonymous ? 'ไม่เปิดเผย' : doctorInfo.license_no}</span>
+            </div>
           </div>
           <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
-            <span className="material-symbols-outlined text-2xl">verified_user</span>
+            <span className="material-symbols-outlined text-2xl">
+              {isAnonymous ? 'visibility_off' : 'verified_user'}
+            </span>
           </div>
         </div>
 
@@ -452,6 +464,20 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             />
           </div>
 
+        </div>
+
+        {/* Checkbox for Anonymous Doctor Name */}
+        <div className="bg-white border border-[#C3C6D1] rounded-2xl p-4 shadow-sm flex items-center gap-3 cursor-pointer hover:bg-[#F0F3FF] transition-colors mt-2">
+          <input
+            type="checkbox"
+            id="anonymous-doctor-checkbox"
+            checked={isAnonymous}
+            onChange={(e) => setIsAnonymous(e.target.checked)}
+            className="w-5 h-5 text-[#006D33] rounded focus:ring-[#006D33] border-gray-300 cursor-pointer accent-[#006D33]"
+          />
+          <label htmlFor="anonymous-doctor-checkbox" className="text-xs font-bold text-[#001E40] cursor-pointer flex-1 select-none leading-relaxed">
+            ท่านไม่ประสงค์เปิดเผยชื่อและเลขประกอบวิชาชีพ ในสรุปคำแนะนำ
+          </label>
         </div>
 
         {/* Primary Action Button to Export PDF */}

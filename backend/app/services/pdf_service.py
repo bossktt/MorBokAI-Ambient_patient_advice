@@ -335,19 +335,26 @@ class PDFService:
         if os.path.exists(doc_icon):
             pdf.image(doc_icon, x=13, y=y_pos + 3.5, w=19, h=19)
 
-        doc_fname = doctor_info.get("first_name", doctor_info.get("name", "แพทย์ผู้ตรวจ"))
-        doc_sname = doctor_info.get("surname", "")
-        doc_lic = doctor_info.get("license_no", "-")
+        is_anon = doctor_info.get("is_anonymous", False) or doctor_info.get("anonymous", False)
 
         pdf.set_xy(35, y_pos + 3.5)
         pdf.set_text_color(*NAVY)
         pdf.set_font(font_name, 'B', 13 if font_name == 'THSarabun' else 11)
-        pdf.cell(0, 6, f"แพทย์ผู้ตรวจ: นพ./พญ. {doc_fname} {doc_sname}".strip(), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-
-        pdf.set_xy(35, y_pos + 11)
-        pdf.set_text_color(71, 85, 105)
-        pdf.set_font(font_name, '', 10.5 if font_name == 'THSarabun' else 9.5)
-        pdf.cell(0, 5, f"เลขประจำตัวประกอบวิชาชีพเวชกรรม: {doc_lic}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        if is_anon:
+            pdf.cell(0, 6, "แพทย์ผู้ตรวจ: ไม่ระบุชื่อและนามสกุล (ผู้ประสงค์ไม่เปิดเผยชื่อ)", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_xy(35, y_pos + 11)
+            pdf.set_text_color(71, 85, 105)
+            pdf.set_font(font_name, '', 10.5 if font_name == 'THSarabun' else 9.5)
+            pdf.cell(0, 5, "เลขประจำตัวประกอบวิชาชีพเวชกรรม: ไม่ระบุ", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            doc_fname = doctor_info.get("first_name", doctor_info.get("name", "แพทย์ผู้ตรวจ"))
+            doc_sname = doctor_info.get("surname", "")
+            doc_lic = doctor_info.get("license_no", "-")
+            pdf.cell(0, 6, f"แพทย์ผู้ตรวจ: นพ./พญ. {doc_fname} {doc_sname}".strip(), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_xy(35, y_pos + 11)
+            pdf.set_text_color(71, 85, 105)
+            pdf.set_font(font_name, '', 10.5 if font_name == 'THSarabun' else 9.5)
+            pdf.cell(0, 5, f"เลขประจำตัวประกอบวิชาชีพเวชกรรม: {doc_lic}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
         pdf.set_xy(35, y_pos + 17)
         pdf.cell(0, 5, f"รหัสอ้างอิงเคส: {encounter_id}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
