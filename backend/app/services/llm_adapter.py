@@ -149,30 +149,29 @@ class GeminiAdapter(BaseLLMAdapter):
         prompt_lower = (sanitized_prompt or "").lower()
 
         # Pattern 1: Chest Pain / Cardiopulmonary (ปวดแน่นหน้าอก / กล้ามเนื้อหัวใจ)
-        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจ", "chest pain"]):
+        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจขาดเลือด", "chest pain"]):
             return {
                 "patient_view": {
                     "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการเจ็บแน่นหน้าอก",
-                    "diagnosis": "ภาวะเจ็บแน่นหน้าอกชั่วคราว / สงสัยกล้ามเนื้อหัวใจขาดเลือดเฉียบพลัน (Angina Pectoris / Rule out Acute Coronary Syndrome)",
+                    "diagnosis": "ภาวะเจ็บแน่นหน้าอกชั่วคราว (unstable angina / Rule out Chronic Coronary Syndrome)",
                     "key_instructions": [
-                        "อมยาใต้ลิ้น (Isordil 5 mg) ทันที 1 เม็ด เมื่อเริ่มมีอาการเจ็บแน่นหน้าอก",
+                        "อมยาใต้ลิ้น ทันที 1 เม็ด เมื่อเริ่มมีอาการเจ็บแน่นหน้าอก ทานได้ทุก 15 นาที แต่ถ้าไม่หายเลยให้มารพ ",
                         "หลีกเลี่ยงการออกกำลังหนัก การยกของหนัก และภาวะเครียดบวมตระหนก",
                         "พักผ่อนให้เพียงพอ งดสูบบุหรี่ และงดอาหารที่มีไขมันสูง"
                     ],
                     "red_flags": ["หากมีอาการแน่นหน้าอกรุนแรง เหงื่อออกตัวเย็น ร้าวไปที่แขนซ้ายหรือกราม ให้โทร 1669 มาโรงพยาบาลทันที"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกโรคหัวใจ"}
+                    "follow_up": {"follow_up_date_thai": "เดี๋ยวถ้ามีอาการให้มาโรงพยบาล"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
                         "start": [
-                            {"med_name": "Isordil 5 mg", "physical_description": "ยาเม็ดเล็กสีขาว", "instructions": "อมใต้ลิ้น 1 เม็ด ทันทีที่มีอาการเจ็บแน่นหน้าอก"},
-                            {"med_name": "Aspirin 81 mg", "physical_description": "ยาเม็ดเคลือบสีเหลือง", "instructions": "1 เม็ด หลังอาหารเช้าทันที"}
+                            {"med_name": "Isordil 5 mg", "physical_description": "ยาเม็ดเล็กสีขาว", "instructions": "อมใต้ลิ้น 1 เม็ด ทันทีที่มีอาการเจ็บแน่นหน้าอก"}
                         ],
                         "stop": [
                             {"med_name": "ยาแก้ปวดคลายกล้ามเนื้อเดิม (NSAIDs)", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานทันที", "reason": "อาจเพิ่มความเสี่ยงต่อโรคหัวใจและหลอดเลือด"}
                         ],
                         "change": [
-                            {"med_name": "Atorvastatin 40 mg", "physical_description": "ยาลดไขมัน เม็ดสีขาว", "change_summary": "ปรับเพิ่มขนาดเป็น 1 เม็ด ก่อนนอน"}
+                            
                         ]
                     }
                 }
@@ -190,7 +189,7 @@ class GeminiAdapter(BaseLLMAdapter):
                         "ทานยาแก้ปวดเกร็งท้อง (Hyoscine) ก่อนอาหารเมื่อมีอาการปวดเกร็ง"
                     ],
                     "red_flags": ["ถ่ายอุจจาระมีมูกเลือด ปวดท้องรุนแรงกดเจ็บด้านขวาล่าง หรือมีไข้สูงหนาวสั่น"],
-                    "follow_up": {"follow_up_date_thai": "ตามนัดหมายแพทย์ (หากถ่ายเหลวเกิน 2 วัน หรือกินอาหารไม่ได้ ให้กลับมาพบแพทย์)"}
+                    "follow_up": {"follow_up_date_thai": "ยังไม่มีนัด (หากถ่ายเหลวเกิน 3 วัน หรือกินอาหารไม่ได้ ให้กลับมาพบแพทย์)"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
@@ -202,36 +201,36 @@ class GeminiAdapter(BaseLLMAdapter):
                             {"med_name": "ยาแก้ปวดกลุ่ม NSAIDs เดิม", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานทันที", "reason": "ระคายเคืองกระเพาะอาหารและทำให้ปวดท้องรุนแรงขึ้น"}
                         ],
                         "change": [
-                            {"med_name": "Omeprazole 20 mg", "physical_description": "แคปซูลสีชมพู-ขาว", "change_summary": "ปรับเป็นรับประทาน 1 แคปซูล ก่อนอาหารเช้า 30 นาที"}
+                            
                         ]
                     }
                 }
             }
 
-        # Pattern 3: Hypertension / Dizziness / Severe Headache (ความดันสูง / เวียนศีรษะ / ปวดศีรษะ)
+        # Pattern 3:  Dizziness / Severe Headache (เวียนศีรษะ / ปวดศีรษะ)
         if any(w in prompt_lower for w in ["ความดัน", "เวียนหัว", "เวียนศีรษะ", "บ้านหมุน", "ปวดหัว", "ปวดศีรษะ", "hypertension"]):
             return {
                 "patient_view": {
                     "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับภาวะความดันโลหิตสูงและเวียนศีรษะ",
-                    "diagnosis": "ภาวะความดันโลหิตสูงเฉียบพลัน ร่วมกับอาการเวียนศีรษะ (Hypertensive Urgency with Vertigo)",
+                    "diagnosis": "  อาการเวียนศีรษะ (Vertigo)",
                     "key_instructions": [
-                        "รับประทานยาลดความดันโลหิตอย่างสม่ำเสมอ ห้ามหยุดยาเองเด็ดขาด",
-                        "วัดความดันโลหิตช่วงเช้าและเย็น พร้อมจดบันทึกค่าใส่สมุดเพื่อนำมาให้แพทย์ดู",
-                        "จำกัดอาหารรสเค็มจัด งดน้ำปลาและซอสปรุงรส"
+                        "ลุกจากที่นอนช้าๆ",
+                        "หลีกเลี่ยงการขับรถ หรือทำงานกับเครื่องจักร ช่วงที่มีอาการ",
+                        "หากมีอาการปวดศีรษะร่วมด้วย ให้รีบมาพบแพทย์"
                     ],
                     "red_flags": ["มีอาการแขนขาอ่อนแรงครึ่งซีก ปากเบี้ยว พูดไม่ชัด หรือปวดศีรษะรุนแรงเฉียบพลัน"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกอายุรกรรม"}
+                    "follow_up": {"follow_up_date_thai": "นัดห้องตรวจหู คอ จมูก สัปดาห์หน้า"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
                         "start": [
-                            {"med_name": "Amlodipine 5 mg", "physical_description": "ยาเม็ดสีเหลืองกลม", "instructions": "1 เม็ด หลังอาหารเช้า"}
+                            {"med_name": "Dimenhydrinate 50 mg", "physical_description": "ยาเม็ดสีเหลืองกลม", "instructions": "1 เม็ด ทานได้ทุก 8 ชั่วโมง"}
                         ],
                         "stop": [
                             {"med_name": "ยาแก้เวียนศีรษะซองเก่า", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานเมื่อหายเวียนศีรษะ", "reason": "รับประทานเฉพาะเมื่อมีอาการเท่านั้น"}
                         ],
                         "change": [
-                            {"med_name": "Enalapril 10 mg", "physical_description": "ยาเม็ดสีขาว", "change_summary": "ปรับเพิ่มเป็น 1 เม็ด วันละ 2 ครั้ง เช้า-เย็น"}
+                           
                         ]
                     }
                 }
@@ -294,31 +293,27 @@ class GeminiAdapter(BaseLLMAdapter):
                 }
             }
 
-        # Pattern 6: Diabetes / Hyperglycemia (เบาหวาน / น้ำตาลในเลือดสูง)
-        if any(w in prompt_lower for w in ["เบาหวาน", "น้ำตาล", "ปัสสาวะบ่อย", "หิวน้ำ", "diabetes", "hyperglycemia"]):
+        # Pattern 6: Palpitation / Cardiac Arrhythmia (ใจสั่น / หัวใจเต้นเร็ว)
+        if any(w in prompt_lower for w in ["ใจสั่น", "หัวใจเต้นเร็ว", "หัวใจเต้นผิดจังหวะ", "palpitation", "arrhythmia", "tachycardia"]):
             return {
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับภาวะระดับน้ำตาลในเลือดสูง",
-                    "diagnosis": "ภาวะระดับน้ำตาลในเลือดสูงชั่วคราวในผู้ป่วยเบาหวาน (Uncontrolled Diabetes Mellitus with Hyperglycemia)",
+                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการใจสั่น",
+                    "diagnosis": "ภาวะหัวใจเต้นเร็ว/ผิดจังหวะชั่วคราว (Palpitations / Rule out Cardiac Arrhythmia)",
                     "key_instructions": [
-                        "รับประทานยาคุมระดับน้ำตาลอย่างเคร่งครัดตรงเวลาทุกมื้อ",
-                        "งดเครื่องดื่มชานม น้ำหวาน ผลไม้รสหวานจัด และขนมเบเกอรี่",
-                        "จิบน้ำสะอาดเรื่อยๆ อย่างน้อยวันละ 8 แก้ว"
+                        "หลีกเลี่ยงเครื่องดื่มที่มีคาเฟอีน เช่น กาแฟ ชา เครื่องดื่มชูกำลัง และงดสูบบุหรี่",
+                        "เมื่อมีอาการใจสั่น ให้นั่งพักผ่อนในที่อากาศถ่ายเท สูดหายใจเข้า-ออกลึกๆ ช้าๆ",
+                        "พักผ่อนให้เพียงพอ หลีกเลี่ยงภาวะเครียดและการออกกำลังกายหักโหม"
                     ],
-                    "red_flags": ["มีอาการหอบหายใจลึก ลมหายใจมีกลิ่นหวานคล้ายผลไม้ ซึม สับสน หรือหมดสติ"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกเบาหวาน"}
+                    "red_flags": ["หากมีอาการใจสั่นร่วมกับเจ็บแน่นหน้าอก หน้ามืด วูบคล้ายจะเป็นลม หรือหายใจลำบาก ให้มาโรงพยาบาลทันที"],
+                    "follow_up": {"follow_up_date_thai": "นัดตรวจคลินิกโรคหัวใจและหลอดเลือด สัปดาห์หน้า"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
                         "start": [
-                            {"med_name": "Metformin 1000 mg", "physical_description": "ยาเม็ดใหญ่สีขาว รูปไข่", "instructions": "1 เม็ด เช้า-เย็น หลังอาหารทันที"}
+                            {"med_name": "Propranolol 10 mg", "physical_description": "ยาเม็ดกลมสีชมพู", "instructions": "1 เม็ด ทานเมื่อมีอาการใจสั่น หรือตามแพทย์สั่ง"}
                         ],
-                        "stop": [
-                            {"med_name": "Metformin 500 mg (ซองเดิม)", "physical_description": "ยาเม็ดเล็กสีขาว กลม", "discard_instruction": "หยิบทิ้งถังขยะทันที", "reason": "ปรับเพิ่มขนาดเป็นยาตัวใหม่แล้ว"}
-                        ],
-                        "change": [
-                            {"med_name": "Glipizide 5 mg", "physical_description": "ยาเม็ดสีขาวแบ่งครึ่ง", "change_summary": "ปรับเพิ่มเป็น 1 เม็ด ก่อนอาหารเช้า 30 นาที"}
-                        ]
+                        "stop": [],
+                        "change": []
                     }
                 }
             }
