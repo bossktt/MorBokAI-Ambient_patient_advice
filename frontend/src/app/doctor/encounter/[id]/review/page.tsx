@@ -180,9 +180,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             <span className="material-symbols-outlined text-[#001E40] text-2xl">medical_services</span>
             <span className="font-extrabold text-xl text-[#001E40]">MorBok</span>
           </div>
-          <span className="text-xs bg-[#003366] text-[#75F999] px-3 py-1 rounded-full font-bold">
-            🤖 {selectedModel}
-          </span>
+          <div className="w-8"></div>
         </div>
       </header>
 
