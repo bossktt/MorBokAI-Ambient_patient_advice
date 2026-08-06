@@ -8,28 +8,25 @@
 ## 🌟 Key Architecture & Highlights
 
 ### 1. 🎙️ Multi-Tiered Speech-to-Text (ASR) Pipeline
-MorBok AI implements a 4-step failover speech recognition pipeline designed for high-accuracy Thai clinical speech:
-1. **Step 1 (Primary)**: **OpenRouter ASR** (`openai/whisper-large-v3-turbo` → `fish-audio/transcribe-1` → `nvidia/parakeet-tdt-0.6b-v3`)
-2. **Step 2 (Secondary)**: **AssemblyAI Speech-to-Text API** (`https://api.assemblyai.com/v2` with `language_code="th"`)
-3. **Step 3 (Tertiary)**: **Google Speech-to-Text** (`th-TH` via `gcp-key.json`)
-4. **Step 4 (Offline)**: Offline Thai audio transcript fallback for local offline testing.
+MorBok AI implements a failover speech recognition pipeline designed for high-accuracy Thai clinical speech:
+1. **Live Web Speech API (Client-side)**: Real-time Thai speech-to-text (`th-TH`) directly in the browser with auto-reconnection.
+2. **AssemblyAI Speech-to-Text API (Backend ASR)**: Multi-tier audio buffer transcription via `https://api.assemblyai.com/v2` with `language_code="th"`.
+3. **Synchronous Persistence Engine**: Guarantees raw transcript data integrity when transitioning between Screen 3 (Scribe) and Screen 4 (Review) via dual `localStorage` fallback keys.
 
-### 2. 🏥 Clinical LLM Adapters & Prompt Standard
-MorBok AI supports pluggable LLM backends configured via `DEFAULT_LLM_PROVIDER`:
-- **OpenRouter (`google/gemini-2.5-flash`)**: High-speed, multimodal reasoning with Google provider routing.
-- **Typhoon 1.5 Medical**: Thai Native Medical LLM (by SCB 10X / Opn).
-- **Google Gemini 2.5 Flash Lite**: Direct Google AI Studio API key.
-- **Azure OpenAI (GPT-4o)**: Enterprise Zero Data Retention (ZDR) HIPAA-compliant adapter.
-- **Local Ollama (`llama3` / `typhoon-7b`)**: 100% private, on-premise hospital network deployment.
+### 2. 🏥 Clinical LLM Adapters & Provider Routing
+MorBok AI supports pluggable LLM backends configured via `DEFAULT_LLM_PROVIDER`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER`:
+- **OpenRouter (`google/gemini-2.5-flash`) with Google Vertex Routing**: High-speed, multimodal reasoning routed specifically via Google Vertex AI infrastructure (`OPENROUTER_PROVIDER=google-vertex`).
+- **Google Gemini 2.5 Flash Lite**: Direct Google AI Studio fallback provider.
+- **ED Fallback Summary Engine**: Offline Emergency Department chief complaint pattern matcher covering 9 key clinical conditions (Palpitations, Chest Pain, GI/Abdominal Pain, Vertigo, Asthma Exacerbation, Flu/Fever, Hyperglycemia, Trauma Wounds, Acute Urticaria).
 
-All adapters execute the **Ambient PVS Clinical Summarizer System Prompt**, enforcing Grade 5 reading levels, emergency red flags, and strict zero-hallucination rules.
+All adapters execute the **Ambient PVS Clinical Summarizer System Prompt**, enforcing Grade 5 Thai reading levels, emergency red flags, and strict zero-hallucination rules.
 
-### 3. 🖥️ 5-Screen Workflow
-- **Screen 1 (`/`)**: Doctor License Login & QR Pairing.
-- **Screen 2 (`/doctor/pdpa`)**: Patient PDPA Consent & Privacy Agreement.
-- **Screen 2b (`/doctor/encounter/new`)**: New Case Selection & Medical Record Initialization.
-- **Screen 3 (`/doctor/encounter/[id]/scribe`)**: Real-time Ambient Voice Recording & Live Speech Waveform visualization via WebSocket.
-- **Screen 4 (`/doctor/encounter/[id]/review`)**: WYSIWYG Doctor Review & Editable Medication Reconciliation Matrix.
+### 3. 🖥️ 5-Screen Clean Workflow
+- **Screen 1 (`/`)**: Physician Profile & Medical License Registration (ว.XXXXX).
+- **Screen 2 (`/doctor/pdpa`)**: Patient PDPA Consent & Legal Privacy Compliance.
+- **Screen 2b (`/doctor/encounter/new`)**: Case Pairing & LINE OA QR Code PIN Verification.
+- **Screen 3 (`/doctor/encounter/[id]/scribe`)**: Real-time Ambient Voice Recording & Live Speech Waveform visualization.
+- **Screen 4 (`/doctor/encounter/[id]/review`)**: WYSIWYG Doctor Review & Editable Medication Reconciliation Matrix. Clean, distractor-free UI with streamlined medical processing indicators.
 - **Screen 5 (`/doctor/encounter/[id]/pdf`)**: PDF Export Generation (10-minute temporary auto-purge storage) & Patient LINE Flex QR Code.
 
 ---
@@ -38,12 +35,15 @@ All adapters execute the **Ambient PVS Clinical Summarizer System Prompt**, enfo
 
 ```
 AI-advice/
-├── backend/                  # FastAPI Python backend (Uvicorn, PyThainLP, ReportLab PDF)
+├── backend/                  # FastAPI Python backend (Uvicorn, PyThaiNLP, ReportLab PDF)
 │   ├── app/                  # FastAPI application modules (main, core, services)
+│   │   ├── core/             # Application settings & environment configuration
+│   │   ├── services/         # Clinical LLM Adapters, De-ID Engine, ASR Pipeline
+│   │   └── tests/            # Automated pytest test suites
 │   ├── pythainlp_data/       # Offline Thai tokenizers and dictionaries
 │   └── test_all_models.py    # Multi-LLM test evaluation suite
 ├── frontend/                 # Next.js 15 App Router Doctor & Patient Portal (React, TypeScript, TailwindCSS)
-│   └── src/app/              # Next.js application routes
+│   └── src/app/              # Next.js application routes (5-screen clinical flow)
 ├── docs/                     # Documentation & Research Knowledge Base
 │   ├── specs/                # Technical specifications, PRDs, system architecture & wireframes
 │   └── research/             # User research forms, questionnaires, CSV datasets & Excel scripts
@@ -52,14 +52,34 @@ AI-advice/
 │   ├── schema_types.py
 │   └── schema_types.ts
 ├── assets/                   # Static design assets & mockups
-│   └── design/               # Wireframe archives & design bundles
-├── scripts/                  # Helper scripts (model downloads)
-├── .github/workflows/        # GitHub Actions CI/CD Pipeline (ci-cd.yml)
-├── docker-compose.yml        # Multi-container orchestration (FastAPI, Next.js, Redis, Postgres, Whisper)
+├── docker-compose.yml        # Multi-container orchestration (FastAPI, Next.js, Redis, Postgres)
+├── render.yaml               # Render Cloud Deployment Blueprint
 ├── .env                      # Application environment variables
 ├── .env.example              # Environment variables template
-├── requirements.txt          # Python backend dependencies
-└── package.json              # Node.js workspace configuration
+├── README.md                 # Markdown Documentation
+├── README.txt                # Plain-text Documentation
+└── requirements.txt          # Python backend dependencies
+```
+
+---
+
+## ⚙️ Environment Configuration
+
+Set up `.env` based on `.env.example`:
+
+```env
+# Clinical LLM Adapter Configuration
+DEFAULT_LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=google/gemini-2.5-flash
+OPENROUTER_PROVIDER=google-vertex
+
+# Gemini Fallback Configuration
+GEMINI_MODEL=gemini-1.5-flash
+GEMINI_API_KEY=AQ.Ab8RN...
+
+# AssemblyAI ASR
+ASSEMBLYAI_API_KEY=ef84aec...
 ```
 
 ---
@@ -74,7 +94,7 @@ AI-advice/
 ### 1. Local Backend Setup (FastAPI)
 ```bash
 cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r ../requirements.txt
 
@@ -97,10 +117,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 docker compose up --build -d
 ```
 
-### 4. Running CI/CD Pipeline Verification Locally
+### 4. Automated Testing & Verification
 ```bash
-# 1. Test Backend Architecture & LLM Adapters
-cd backend && PYTHONPATH=. venv/bin/python test_all_models.py
+# 1. Test Backend Architecture & Clinical LLM Adapters
+cd backend && PYTHONPATH=. ./venv/bin/pytest
 
 # 2. Test Frontend TypeScript & Production Build
 cd ../frontend && npx tsc --noEmit && npm run build
