@@ -62,7 +62,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         } catch (e) { }
       }
 
-      const savedTranscript = localStorage.getItem(`pvs_transcript_${encounterId}`);
+      const savedTranscript =
+        localStorage.getItem(`pvs_transcript_${encounterId}`) ||
+        localStorage.getItem('pvs_transcript_latest');
+
       if (savedTranscript) {
         setRawTranscript(savedTranscript);
 

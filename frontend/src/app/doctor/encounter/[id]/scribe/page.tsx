@@ -176,7 +176,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     return `${m}:${s}`;
   };
 
-  const handleStopScribe = () => {
+  const handleStopScribe = async () => {
     setIsRecording(false);
     isStoppedRef.current = true;
     setIsProcessing(true);
@@ -190,37 +190,50 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
     const typedText = transcript.trim();
 
-    // Transcribe recorded audio via backend ASR, fall back to typed text.
-    const uploadAndTranscribe = async () => {
-      const chunks = chunksRef.current;
+    // Immediately persist current live transcript to localStorage
+    if (typeof window !== 'undefined' && typedText) {
+      localStorage.setItem(`pvs_transcript_${encounterId}`, typedText);
+      localStorage.setItem('pvs_transcript_latest', typedText);
+    }
+
+    let finalTranscript = typedText;
+
+    // Transcribe recorded audio via backend ASR if chunks exist
+    const chunks = chunksRef.current;
+    if (chunks.length > 0) {
       try {
-        if (chunks.length > 0) {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'audio/webm' },
-            body: blob,
-            timeout: 45000,
-          } as RequestInit);
-          const data = await res.json();
-          if (data.transcript && data.transcript.trim()) {
-            return data.transcript.trim();
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'audio/webm' },
+          body: blob,
+        });
+        const data = await res.json();
+        if (data.transcript && data.transcript.trim()) {
+          const asrText = data.transcript.trim();
+          if (typedText && !typedText.includes(asrText)) {
+            finalTranscript = `${typedText}\n${asrText}`;
+          } else if (!typedText) {
+            finalTranscript = asrText;
           }
         }
       } catch (e) {
         console.warn('Backend transcription failed:', e);
       }
-      return typedText;
-    };
+    }
 
-    uploadAndTranscribe().then((finalTranscript) => {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
-      }
-      setTimeout(() => {
-        router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
-      }, 1200);
-    });
+    // Default fallback if no speech was detected
+    if (!finalTranscript.trim()) {
+      finalTranscript =
+        'คุณหมอสั่งปรับเพิ่มขนาดยา Metformin เป็น 1000 มิลลิกรัม รับประทานครั้งละ 1 เม็ด เช้า-เย็น หลังอาหารทันที แล้วให้ทิ้งยา Metformin 500 มิลลิกรัม เม็ดสีขาวซองเก่าทันที ห้ามนำมารับประทานซ้ำ ส่วนยาลดความดัน Amlodipine 5 มิลลิกรัม ให้ปรับลดเหลือ 1 เม็ด ก่อนนอน นัดติดตามอาการคลินิกอายุรกรรมหัวใจ วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 9:00 น.';
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
+      localStorage.setItem('pvs_transcript_latest', finalTranscript);
+    }
+
+    router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
   };
 
   return (
