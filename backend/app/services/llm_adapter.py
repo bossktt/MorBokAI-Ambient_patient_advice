@@ -81,6 +81,18 @@ class OpenRouterAdapter(BaseLLMAdapter):
         model_name = getattr(settings, "OPENROUTER_MODEL", "google/gemini-2.5-flash")
         prompt_text = CLINICAL_SYSTEM_PROMPT.format(sanitized_prompt=sanitized_prompt)
 
+        req_payload = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt_text}],
+            "response_format": {"type": "json_object"}
+        }
+
+        provider_pref = getattr(settings, "OPENROUTER_PROVIDER", None)
+        if provider_pref:
+            req_payload["provider"] = {
+                "order": [provider_pref]
+            }
+
         try:
             res = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -88,11 +100,7 @@ class OpenRouterAdapter(BaseLLMAdapter):
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 },
-                json={
-                    "model": model_name,
-                    "messages": [{"role": "user", "content": prompt_text}],
-                    "response_format": {"type": "json_object"}
-                },
+                json=req_payload,
                 timeout=15
             )
             raw_res = res.json()
@@ -148,8 +156,28 @@ class GeminiAdapter(BaseLLMAdapter):
         """
         prompt_lower = (sanitized_prompt or "").lower()
 
+        # Palpitations Pattern (ใจสั่น / หัวใจเต้นเร็ว)
+        if any(w in prompt_lower for w in ["ใจสั่น", "palpitations"]):
+            return {
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการใจสั่น",
+                    "diagnosis": "ภาวะใจสั่นและหัวใจเต้นผิดจังหวะชั่วคราว (Palpitations / Rule out Arrhythmia)",
+                    "key_instructions": [
+                        "พักผ่อนในที่อากาศถ่ายเทสะดวก หลีกเลี่ยงกาแฟ ชา เครื่องดื่มชูกำลัง และบุหรี่",
+                        "สังเกตอาการหากมีอาการเวียนศีรษะหรือหน้ามืดให้นั่งพักทันที"
+                    ],
+                    "red_flags": ["มีอาการเจ็บแน่นหน้าอก หายใจลำบาก หรือหน้ามืดหมดสติ ให้มารพ. ทันที"],
+                    "follow_up": {"follow_up_date_thai": "นัดตรวจคลินิกโรคหัวใจ 1 สัปดาห์"}
+                },
+                "caregiver_matrix": {
+                    "medication_reconciliation": {
+                        "start": [], "stop": [], "change": []
+                    }
+                }
+            }
+
         # Pattern 1: Chest Pain / Cardiopulmonary (ปวดแน่นหน้าอก / กล้ามเนื้อหัวใจ)
-        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจขาดเลือด", "chest pain"]):
+        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจ", "chest pain"]):
             return {
                 "patient_view": {
                     "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการเจ็บแน่นหน้าอก",
@@ -245,21 +273,22 @@ class GeminiAdapter(BaseLLMAdapter):
                     "key_instructions": [
                         "สูดพ่นยาขยายหลอดลม (Ventolin Evohaler) 2 ปั๊ม ทันทีที่มีอาการหอบเหนื่อย",
                         "บ้วนปากและคอด้วยน้ำสะอาดทุกครั้งหลังใช้สูดยาสเตียรอยด์เพื่อป้องกันเชื้อราในปาก",
-                        "หลีกเลี่ยงควันบุหรี่ ฝุ่น PM2.5 และสารก่อภูมิแพ้"
+                        "หลีกเลี่ยงควันบุหรี่ ควันธูป ควันไฟ ฝุ่น PM2.5 และสารก่อภูมิแพ้"
                     ],
-                    "red_flags": ["หายใจมีเสียงหวีดรุนแรง พูดได้ไม่เป็นประโยค หายใจปีกจมูกบาน หรือริมฝีปากเขียวคล้ำ"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 10:00 น. คลินิกโรคระบบหายใจ"}
+                    "red_flags": ["หายใจมีเสียงหวีดรุนแรง พูดได้ไม่เป็นประโยค หายใจปีกจมูกบาน หรือริมฝีปากเขียวคล้ำ ให้มาโรงพยาบาล"],
+                    "follow_up": {"follow_up_date_thai": "นัดดูอาการคลินิกโรคระบบหายใจ สัปดาห์หน้า"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
                         "start": [
-                            {"med_name": "Ventolin Inhaler 100 mcg", "physical_description": "หลอดพ่นสีฟ้า", "instructions": "สูดพ่น 2 ปั๊ม เวลามีอาการหอบเหนื่อย"}
+                            {"med_name": "Ventolin Inhaler 100 mcg", "physical_description": "หลอดพ่นสีฟ้า", "instructions": "สูดพ่น 2 ปั๊ม เวลามีอาการหอบเหนื่อย"},
+                            {"med_name": "Prednisolone 5 mg", "physical_description": "ยาเม็ดสีขาวเล็ก", "change_summary": "ทาน 6 เม็ด หลังอาหารเช้าทันที ติดต่อกัน 5 วันแล้วหยุด"}
                         ],
                         "stop": [
                             {"med_name": "ยาแก้ไอชนิดน้ำเชื่อมที่มีโคเดอีน", "physical_description": "ขวดเดิม", "discard_instruction": "หยุดทานทันที", "reason": "อาจกดการหายใจทำให้หอบเหนื่อยมากขึ้น"}
                         ],
                         "change": [
-                            {"med_name": "Prednisolone 5 mg", "physical_description": "ยาเม็ดสีขาวเล็ก", "change_summary": "ทาน 6 เม็ด หลังอาหารเช้าทันที ติดต่อกัน 5 วันแล้วหยุด"}
+                            
                         ]
                     }
                 }
@@ -273,7 +302,7 @@ class GeminiAdapter(BaseLLMAdapter):
                     "diagnosis": "โรคไข้หวัดธรรมดา / ไข้หวัดใหญ่เฉียบพลัน (Common Cold / Acute Upper Respiratory Infection)",
                     "key_instructions": [
                         "เช็ดตัวลดไข้ด้วยน้ำธรรมดาอย่างสม่ำเสมอเมื่อมีไข้สูง",
-                        "รับประทานยาพาราเซตามอลเมื่อมีไข้ ห้ามทานเกินวันละ 8 เม็ด (4,000 มก.)",
+                        "รับประทานยาพาราเซตามอลเมื่อมีไข้ ห้ามทานเกินวันละ 8 เม็ด",
                         "พักผ่อนให้เพียงพอและดื่มน้ำสะอาดวันละ 8-10 แก้ว"
                     ],
                     "red_flags": ["หากมีไข้สูงเกิน 39°C ติดต่อกันเกิน 3 วัน หรือมีจุดเลือดออกตามผิวหนัง ให้กลับมาพบแพทย์ทันที"],
@@ -293,27 +322,31 @@ class GeminiAdapter(BaseLLMAdapter):
                 }
             }
 
-        # Pattern 6: Palpitation / Cardiac Arrhythmia (ใจสั่น / หัวใจเต้นเร็ว)
-        if any(w in prompt_lower for w in ["ใจสั่น", "หัวใจเต้นเร็ว", "หัวใจเต้นผิดจังหวะ", "palpitation", "arrhythmia", "tachycardia"]):
+        # Pattern 6: Diabetes / Hyperglycemia (เบาหวาน / น้ำตาลในเลือดสูง)
+        if any(w in prompt_lower for w in ["เบาหวาน", "น้ำตาล", "ปัสสาวะบ่อย", "หิวน้ำ", "diabetes", "hyperglycemia"]):
             return {
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการใจสั่น",
-                    "diagnosis": "ภาวะหัวใจเต้นเร็ว/ผิดจังหวะชั่วคราว (Palpitations / Rule out Cardiac Arrhythmia)",
+                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับภาวะระดับน้ำตาลในเลือดสูง",
+                    "diagnosis": "ภาวะระดับน้ำตาลในเลือดสูงชั่วคราวในผู้ป่วยเบาหวาน (Uncontrolled Diabetes Mellitus with Hyperglycemia)",
                     "key_instructions": [
-                        "หลีกเลี่ยงเครื่องดื่มที่มีคาเฟอีน เช่น กาแฟ ชา เครื่องดื่มชูกำลัง และงดสูบบุหรี่",
-                        "เมื่อมีอาการใจสั่น ให้นั่งพักผ่อนในที่อากาศถ่ายเท สูดหายใจเข้า-ออกลึกๆ ช้าๆ",
-                        "พักผ่อนให้เพียงพอ หลีกเลี่ยงภาวะเครียดและการออกกำลังกายหักโหม"
+                        "รับประทานยาคุมระดับน้ำตาลอย่างเคร่งครัดตรงเวลาทุกมื้อ",
+                        "งดเครื่องดื่มชานม น้ำหวาน ผลไม้รสหวานจัด และขนมเบเกอรี่",
+                        "จิบน้ำสะอาดเรื่อยๆ อย่างน้อยวันละ 8 แก้ว"
                     ],
-                    "red_flags": ["หากมีอาการใจสั่นร่วมกับเจ็บแน่นหน้าอก หน้ามืด วูบคล้ายจะเป็นลม หรือหายใจลำบาก ให้มาโรงพยาบาลทันที"],
-                    "follow_up": {"follow_up_date_thai": "นัดตรวจคลินิกโรคหัวใจและหลอดเลือด สัปดาห์หน้า"}
+                    "red_flags": ["มีอาการหอบหายใจลึก ลมหายใจมีกลิ่นหวานคล้ายผลไม้ ซึม สับสน หรือหมดสติ"],
+                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกเบาหวาน"}
                 },
                 "caregiver_matrix": {
                     "medication_reconciliation": {
                         "start": [
-                            {"med_name": "Propranolol 10 mg", "physical_description": "ยาเม็ดกลมสีชมพู", "instructions": "1 เม็ด ทานเมื่อมีอาการใจสั่น หรือตามแพทย์สั่ง"}
+                            {"med_name": "Metformin 1000 mg", "physical_description": "ยาเม็ดใหญ่สีขาว รูปไข่", "instructions": "1 เม็ด เช้า-เย็น หลังอาหารทันที"}
                         ],
-                        "stop": [],
-                        "change": []
+                        "stop": [
+                            {"med_name": "Metformin 500 mg (ซองเดิม)", "physical_description": "ยาเม็ดเล็กสีขาว กลม", "discard_instruction": "หยิบทิ้งถังขยะทันที", "reason": "ปรับเพิ่มขนาดเป็นยาตัวใหม่แล้ว"}
+                        ],
+                        "change": [
+                            {"med_name": "Glipizide 5 mg", "physical_description": "ยาเม็ดสีขาวแบ่งครึ่ง", "change_summary": "ปรับเพิ่มเป็น 1 เม็ด ก่อนอาหารเช้า 30 นาที"}
+                        ]
                     }
                 }
             }
@@ -339,7 +372,7 @@ class GeminiAdapter(BaseLLMAdapter):
                             {"med_name": "Paracetamol 500 mg", "physical_description": "ยาเม็ดสีขาวกลม", "instructions": "1 เม็ด ทุก 6 ชั่วโมง เวลามีอาการปวดแผล"}
                         ],
                         "stop": [
-                            {"med_name": "ยาละลายลิ่มเลือดเดิม", "physical_description": "ซองเดิม", "discard_instruction": "งดรับประทาน 3 วันตามแพทย์สั่ง", "reason": "ป้องกันภาวะเลือดออกขอบแผลช้ำ"}
+                            
                         ],
                         "change": []
                     }

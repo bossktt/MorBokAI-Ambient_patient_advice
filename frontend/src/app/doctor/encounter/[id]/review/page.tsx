@@ -240,7 +240,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         {isGeneratingLLM && (
           <div className="bg-[#Eefdf2] border border-[#C3E8D1] rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-4 shadow-sm animate-pulse">
             <span className="material-symbols-outlined text-4xl text-[#10A352] animate-spin">autorenew</span>
-            <span className="text-[#10A352] font-bold">✨ AI {selectedModel} กำลังประมวลผลคำแนะนำจากบทสนทนาห้องตรวจ...</span>
+            <span className="text-[#10A352] font-bold">✨ AI กำลังประมวลผล คำแนะนำทางการแพทย์อยู่...</span>
           </div>
         )}
 

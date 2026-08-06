@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     DEFAULT_LLM_PROVIDER: str = "openrouter"
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
+    OPENROUTER_PROVIDER: Optional[str] = "google-vertex"
 
     # Gemini AI Studio (fallback)
     GEMINI_MODEL: str = "gemini-2.5-flash-lite"
