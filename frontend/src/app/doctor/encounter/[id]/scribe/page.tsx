@@ -23,6 +23,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const mimeTypeRef = useRef<string>('audio/webm');
   const isPausedRef = useRef(false);
   const isStoppedRef = useRef(false);
 
@@ -62,10 +63,33 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     wsRef.current = socket;
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      // Pick a mimeType the browser actually supports:
+      // Android Chrome/Edge -> audio/webm;codecs=opus
+      // iPad Safari          -> audio/mp4 (no webm support)
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        '',
+      ];
+      let mimeType = '';
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported) {
+        for (const c of candidates) {
+          if (!c || MediaRecorder.isTypeSupported(c)) {
+            mimeType = c;
+            break;
+          }
+        }
+      }
+      mimeTypeRef.current = mimeType || 'audio/webm';
+
       navigator.mediaDevices
         .getUserMedia({ audio: true })
         .then((stream) => {
-          const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+          const mediaRecorder = mimeType
+            ? new MediaRecorder(stream, { mimeType })
+            : new MediaRecorder(stream);
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
@@ -202,10 +226,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     const chunks = chunksRef.current;
     if (chunks.length > 0) {
       try {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const blob = new Blob(chunks, { type: mimeTypeRef.current });
         const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
           method: 'POST',
-          headers: { 'Content-Type': 'audio/webm' },
+          headers: { 'Content-Type': mimeTypeRef.current },
           body: blob,
         });
         const data = await res.json();

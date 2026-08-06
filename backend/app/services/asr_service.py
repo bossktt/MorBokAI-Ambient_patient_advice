@@ -23,6 +23,11 @@ def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     if audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
         return audio_bytes
 
+    # If it's a compressed container (WebM/MP4/Opus from MediaRecorder),
+    # do NOT fake a WAV header — whisper can decode these natively.
+    if audio_bytes[:4] in (b'\x1aE\xdf\xa3', b'ftyp', b'OggS', b'\xff\xf1', b'\xff\xf9'):
+        return audio_bytes
+
     num_samples = len(audio_bytes) // 2
     data_size = num_samples * 2
     file_size = 36 + data_size
@@ -125,7 +130,7 @@ class MultiTierASRService:
         return None
 
     @staticmethod
-    def transcribe_audio_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> str:
+    def transcribe_audio_bytes(audio_bytes: bytes, sample_rate: int = 16000, mime_type: str = "audio/webm") -> str:
         """
         Transcribes incoming audio bytes via Multi-Tier ASR Pipeline.
         """
@@ -133,6 +138,16 @@ class MultiTierASRService:
             return "หมอขอปรับเพิ่มยา Metformin เป็น 1000mg เช้าเย็น หลังอาหารทันที แล้วให้ทิ้งยาตัวสีขาวเดิมซองเก่าทันทีเลยนะ ส่วนยาลดความดัน Amlodipine ให้ปรับลดเหลือ 1 เม็ดก่อนนอน"
 
         wav_bytes = ensure_wav_bytes(audio_bytes, sample_rate)
+
+        # Map mimeType -> (filename, content_type) for the ASR API
+        mime_to_file = {
+            "audio/webm": ("audio.webm", "audio/webm"),
+            "audio/mp4": ("audio.m4a", "audio/mp4"),
+            "audio/aac": ("audio.aac", "audio/aac"),
+            "audio/wav": ("audio.wav", "audio/wav"),
+            "audio/x-wav": ("audio.wav", "audio/wav"),
+        }
+        filename, content_type = mime_to_file.get(mime_type, ("audio.webm", "audio/webm"))
 
         # =========================================================================
         # STEP 1: Primary ASR - OpenRouter Audio Transcriptions
@@ -149,7 +164,7 @@ class MultiTierASRService:
                     response = requests.post(
                         "https://openrouter.ai/api/v1/audio/transcriptions",
                         headers={"Authorization": f"Bearer {openrouter_key}"},
-                        files={"file": ("audio.wav", wav_bytes, "audio/wav")},
+                        files={"file": (filename, wav_bytes, content_type)},
                         data={"model": model_name, "language": "th"},
                         timeout=15
                     )
