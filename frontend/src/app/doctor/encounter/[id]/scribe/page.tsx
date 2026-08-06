@@ -26,6 +26,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const mimeTypeRef = useRef<string>('audio/webm');
   const isPausedRef = useRef(false);
   const isStoppedRef = useRef(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   // Keep isPaused in sync for stale-closure-free handlers
   useEffect(() => {
@@ -87,6 +88,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
       navigator.mediaDevices
         .getUserMedia({ audio: true })
         .then((stream) => {
+          setDebugInfo((d) => `${d}\n✅ mic OK, mime=${mimeTypeRef.current}`);
           const mediaRecorder = mimeType
             ? new MediaRecorder(stream, { mimeType })
             : new MediaRecorder(stream);
@@ -95,6 +97,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
               chunksRef.current.push(event.data);
+              setDebugInfo((d) => `${d}\n🎤 chunks=${chunksRef.current.length}`);
               if (!isPausedRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                 wsRef.current.send(event.data);
               }
@@ -105,6 +108,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         })
         .catch((err) => {
           console.warn('Microphone notice:', err);
+          setDebugInfo((d) => `${d}\n❌ mic denied: ${err?.name || err}`);
         });
     }
 
@@ -227,12 +231,14 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     if (chunks.length > 0) {
       try {
         const blob = new Blob(chunks, { type: mimeTypeRef.current });
+        setDebugInfo((d) => `${d}\n⬆️ uploading ${chunks.length} chunks to ${API_BASE} (${mimeTypeRef.current})`);
         const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
           method: 'POST',
           headers: { 'Content-Type': mimeTypeRef.current },
           body: blob,
         });
         const data = await res.json();
+        setDebugInfo((d) => `${d}\n⬇️ ASR response: ${JSON.stringify(data).slice(0, 120)}`);
         if (data.transcript && data.transcript.trim()) {
           const asrText = data.transcript.trim();
           if (typedText && !typedText.includes(asrText)) {
@@ -243,7 +249,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         }
       } catch (e) {
         console.warn('Backend transcription failed:', e);
+        setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${e?.message || e}`);
       }
+    } else {
+      setDebugInfo((d) => `${d}\n⚠️ no chunks recorded (${mimeTypeRef.current})`);
     }
 
     // Default fallback if no speech was detected
@@ -366,6 +375,13 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
             rows={4}
             className="w-full bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl p-3 text-xs text-[#111C2C] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#006D33] font-medium leading-relaxed"
           />
+
+          {/* Debug / diagnostics panel */}
+          {debugInfo && (
+            <pre className="w-full bg-[#111c2c] text-[#75f999] rounded-xl p-3 text-[10px] leading-relaxed whitespace-pre-wrap overflow-x-auto">
+              {debugInfo}
+            </pre>
+          )}
         </div>
 
       </main>
