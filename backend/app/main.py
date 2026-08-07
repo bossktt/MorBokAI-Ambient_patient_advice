@@ -220,7 +220,9 @@ def process_transcript(payload: dict):
     patient_view = rehydrated.get("patient_view", {})
     caregiver_matrix = rehydrated.get("caregiver_matrix", {}).get("medication_reconciliation", {})
 
-    diagnosis = patient_view.get("diagnosis") or "โรคไข้หวัดธรรมดา (Common Cold / Acute Upper Respiratory Infection)"
+    raw_diag = (patient_view.get("diagnosis") or "").strip()
+    invalid_diags = ["ไม่ระบุ", "ไม่มี", "ไม่พบข้อมูล", "ไม่พบคำวินิจฉัย", "ไม่พบข้อวินิจฉัย", "ไม่ระบุข้อวินิจฉัย", "-", "N/A"]
+    diagnosis = "" if raw_diag in invalid_diags else raw_diag
     instructions = patient_view.get("key_instructions") or [
         "รับประทานยาตามที่เภสัชกรแนะนำให้ครบถ้วน",
         "หากมีไข้สูงติดต่อกันเกิน 3 วัน ให้กลับมาพบแพทย์เพื่อตรวจเลือดเพิ่มเติม",

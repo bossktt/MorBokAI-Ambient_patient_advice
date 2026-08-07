@@ -49,6 +49,8 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isAnonymous, setIsAnonymous] = useState(false);
 
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false);
+  const [diagnosisError, setDiagnosisError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Read recorded transcript & Doctor Info, then process through Clinical LLM Adapter
   useEffect(() => {
@@ -82,7 +84,14 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           .then((res) => res.json())
           .then((data) => {
             if (data.status === 'SUCCESS') {
-              if (data.diagnosis) setDiagnosis(data.diagnosis);
+              const rawDiag = (data.diagnosis || '').trim();
+              const invalidDiags = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', '-', 'N/A'];
+              if (rawDiag && !invalidDiags.includes(rawDiag)) {
+                setDiagnosis(rawDiag);
+                setDiagnosisError(false);
+              } else {
+                setDiagnosis('');
+              }
               if (data.instructions && data.instructions.length > 0) setInstructions(data.instructions);
               if (data.startMeds) setStartMeds(data.startMeds);
               if (data.stopMeds) setStopMeds(data.stopMeds);
@@ -132,6 +141,16 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
   // Export note to PDF & proceed to Screen 5
   const handleExportPDF = async () => {
+    if (!diagnosis || !diagnosis.trim()) {
+      setDiagnosisError(true);
+      setErrorMsg('กรุณากรอกวินิจฉัยโรค (Diagnosis) ก่อนดำเนินการต่อ');
+      const el = document.getElementById('diagnosis-textarea');
+      if (el) el.focus();
+      return;
+    }
+
+    setDiagnosisError(false);
+    setErrorMsg('');
     setIsExporting(true);
     const summaryData = {
       diagnosis,
@@ -248,19 +267,40 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         <div className="grid grid-cols-1 gap-4 text-left">
 
           {/* Card 1: Diagnosis & Doctor's Advice */}
-          <div className="bg-white border border-[#C3C6D1] rounded-2xl p-4 shadow-sm space-y-3">
+          <div className={`bg-white border ${diagnosisError ? 'border-red-500 ring-2 ring-red-200' : 'border-[#C3C6D1]'} rounded-2xl p-4 shadow-sm space-y-3 transition-all`}>
             <div className="flex justify-between items-center border-b border-[#C3C6D1]/60 pb-2.5">
               <div className="flex items-center gap-2 text-[#003366]">
                 <span className="material-symbols-outlined text-xl">stethoscope</span>
-                <h2 className="font-bold text-sm text-[#001E40]">1. วินิจฉัยโรค (Diagnosis)</h2>
+                <h2 className="font-bold text-sm text-[#001E40]">
+                  1. วินิจฉัยโรค (Diagnosis) <span className="text-red-500 font-extrabold">*</span>
+                </h2>
               </div>
+              {diagnosisError && (
+                <span className="text-xs font-bold text-red-600 animate-pulse">
+                  ⚠️ จำเป็นต้องกรอก
+                </span>
+              )}
             </div>
             <textarea
+              id="diagnosis-textarea"
               value={diagnosis}
-              onChange={(e) => setDiagnosis(e.target.value)}
-              className="w-full bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl p-3 text-xs text-[#111C2C] focus:ring-2 focus:ring-[#006D33] font-bold leading-relaxed"
+              onChange={(e) => {
+                setDiagnosis(e.target.value);
+                if (e.target.value.trim()) {
+                  setDiagnosisError(false);
+                  setErrorMsg('');
+                }
+              }}
+              placeholder="วินิจฉัยโรค"
+              className={`w-full bg-[#F0F3FF] border ${diagnosisError ? 'border-red-400 focus:ring-red-500' : 'border-[#C3C6D1] focus:ring-[#006D33]'} rounded-xl p-3 text-xs text-[#111C2C] focus:ring-2 font-bold leading-relaxed placeholder-slate-400`}
               rows={2}
             />
+            {diagnosisError && (
+              <p className="text-xs font-bold text-red-600 flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">error</span>
+                กรุณากรอกวินิจฉัยโรคก่อนสร้างเอกสาร PDF
+              </p>
+            )}
           </div>
 
           {/* Card 2: Patient Self-Care Guide */}
@@ -481,6 +521,14 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           </label>
         </div>
 
+        {/* Error Alert Message */}
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-300 text-red-700 text-xs font-bold rounded-xl p-3 flex items-center gap-2 animate-bounce">
+            <span className="material-symbols-outlined text-lg">warning</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Primary Action Button to Export PDF */}
         <div className="pt-2">
           <button
@@ -496,7 +544,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       </main>
 
       <footer className="w-full py-3 text-center text-xs text-slate-500 border-t border-[#c3c6d1] bg-white">
-        MorBok • Step 4/5 Review & Edit Note
+        MorBok • Step 4 Review & Edit Note
       </footer>
     </div>
   );
