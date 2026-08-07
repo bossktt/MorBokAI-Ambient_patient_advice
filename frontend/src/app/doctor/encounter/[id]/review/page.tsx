@@ -86,8 +86,9 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           .then((data) => {
             if (data.status === 'SUCCESS') {
               const rawDiag = (data.diagnosis || '').trim();
-              const invalidDiags = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', '-', 'N/A'];
-              if (rawDiag && !invalidDiags.includes(rawDiag)) {
+              const invalidKeywords = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', 'ไม่พบการวินิจฉัย', 'no diagnosis', 'not specified'];
+              const isInvalid = !rawDiag || rawDiag.toLowerCase() === '-' || rawDiag.toLowerCase() === 'n/a' || invalidKeywords.some((kw) => rawDiag.toLowerCase().includes(kw));
+              if (!isInvalid) {
                 setDiagnosis(rawDiag);
                 setDiagnosisError(false);
               } else {
@@ -281,7 +282,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
                   setErrorMsg('');
                 }
               }}
-              placeholder="วินิจฉัยโรค"
+              placeholder="โปรดระบุโรค"
               className={`w-full bg-[#F0F3FF] border ${diagnosisError ? 'border-red-400 focus:ring-red-500' : 'border-[#C3C6D1] focus:ring-[#006D33]'} rounded-xl p-3 text-xs text-[#111C2C] focus:ring-2 font-bold leading-relaxed placeholder-slate-400`}
               rows={2}
             />

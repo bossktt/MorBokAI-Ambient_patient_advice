@@ -243,8 +243,9 @@ def process_transcript(payload: dict):
     caregiver_matrix = rehydrated.get("caregiver_matrix", {}).get("medication_reconciliation", {})
 
     raw_diag = (patient_view.get("diagnosis") or "").strip()
-    invalid_diags = ["ไม่ระบุ", "ไม่มี", "ไม่พบข้อมูล", "ไม่พบคำวินิจฉัย", "ไม่พบข้อวินิจฉัย", "ไม่ระบุข้อวินิจฉัย", "-", "N/A"]
-    diagnosis = "" if raw_diag in invalid_diags else raw_diag
+    invalid_keywords = ["ไม่ระบุ", "ไม่มี", "ไม่พบข้อมูล", "ไม่พบคำวินิจฉัย", "ไม่พบข้อวินิจฉัย", "ไม่ระบุข้อวินิจฉัย", "ไม่พบการวินิจฉัย", "no diagnosis", "not specified"]
+    is_invalid_diag = not raw_diag or raw_diag.lower() in ["-", "n/a"] or any(kw in raw_diag.lower() for kw in invalid_keywords)
+    diagnosis = "" if is_invalid_diag else raw_diag
     instructions = patient_view.get("key_instructions") or [
         "รับประทานยาตามที่เภสัชกรแนะนำให้ครบถ้วน",
         "หากมีไข้สูงติดต่อกันเกิน 3 วัน ให้กลับมาพบแพทย์เพื่อตรวจเลือดเพิ่มเติม",
