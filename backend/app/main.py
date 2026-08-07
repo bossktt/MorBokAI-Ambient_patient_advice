@@ -27,6 +27,7 @@ import time
 import json
 import re
 import uuid
+import datetime
 from typing import Dict, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, status
@@ -59,6 +60,21 @@ app.add_middleware(
 # Temporary PDF Storage Directory
 TEMP_PDF_DIR = os.path.join(os.path.dirname(__file__), "temp_pdfs")
 os.makedirs(TEMP_PDF_DIR, exist_ok=True)
+
+# Ensure logs directory exists
+LOGS_DIR = settings.LOGS_DIR
+os.makedirs(LOGS_DIR, exist_ok=True)
+LOG_FILE_PATH = os.path.join(LOGS_DIR, settings.LOG_FILE_NAME)
+
+def append_encounter_log(log_data: dict):
+    """Appends encounter record to backend/logs/encounter_logs.jsonl for Google Drive sync."""
+    if not settings.ENABLE_ENCOUNTER_LOGGING:
+        return
+    try:
+        with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"⚠️ Failed to write encounter log: {e}")
 
 # Metadata store for PDF expiry tracking (pdf_id -> {file_path, expires_at})
 pdf_metadata_store: Dict[str, Dict[str, Any]] = {}
@@ -191,6 +207,7 @@ def process_transcript(payload: dict):
     """
     raw_transcript = payload.get("raw_transcript", "").strip()
     doctor_info = payload.get("doctor_info", {})
+    encounter_id = payload.get("encounter_id", f"ENC_{uuid.uuid4().hex[:8].upper()}")
 
     if not raw_transcript:
         return {
@@ -255,7 +272,7 @@ def process_transcript(payload: dict):
 
     follow_up = patient_view.get("follow_up", {}).get("follow_up_date_thai") or "ตามนัดหมายแพทย์ (หากมีอาการไข้สูงเกิน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"
 
-    return {
+    response_payload = {
         "status": "SUCCESS",
         "diagnosis": diagnosis,
         "instructions": instructions,
@@ -264,6 +281,35 @@ def process_transcript(payload: dict):
         "changeMeds": change_meds,
         "followUpDate": follow_up
     }
+
+    # Append log entry (Syncs to Google Drive)
+    log_entry = {
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
+        "encounter_id": encounter_id,
+        "doctor_info": doctor_info,
+        "llm_config": {
+            "provider": settings.DEFAULT_LLM_PROVIDER,
+            "model": settings.OPENROUTER_MODEL if settings.DEFAULT_LLM_PROVIDER == "openrouter" else settings.GEMINI_MODEL
+        },
+        "raw_transcript": raw_transcript,
+        "sanitized_transcript": sanitized_text,
+        "deid_metadata": meta,
+        "clinical_summary": response_payload
+    }
+    append_encounter_log(log_entry)
+
+    return response_payload
+
+@app.get(f"{settings.API_PREFIX}/encounters/export-logs")
+def export_encounter_logs():
+    """Download collected raw transcript & clinical LLM summary log dataset."""
+    if not os.path.exists(LOG_FILE_PATH):
+        raise HTTPException(status_code=404, detail="No encounter logs found.")
+    return FileResponse(
+        path=LOG_FILE_PATH,
+        media_type="application/x-ndjson",
+        filename=f"encounter_logs_{int(time.time())}.jsonl"
+    )
 
 @app.get(f"{settings.API_PREFIX}/encounters/{{encounter_id}}")
 def get_encounter(encounter_id: str):

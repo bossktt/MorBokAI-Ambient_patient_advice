@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
 
+    # Logging Configuration
+    ENABLE_ENCOUNTER_LOGGING: bool = True
+    LOGS_DIR: str = os.path.join(BASE_DIR, "backend", "logs")
+    LOG_FILE_NAME: str = "encounter_logs.jsonl"
+
     class Config:
         env_file = (ROOT_ENV, ".env")
         extra = "ignore"

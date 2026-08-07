@@ -77,6 +77,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            encounter_id: encounterId,
             raw_transcript: savedTranscript,
             doctor_info: docInfoObj
           })

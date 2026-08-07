@@ -31,6 +31,8 @@ htmlcov/
 *.log
 backend/pythainlp_data/
 backend/app/temp_pdfs/
+backend/logs/
+*.jsonl
 *.pdf
 
 # -----------------------------------------------------------------------------
