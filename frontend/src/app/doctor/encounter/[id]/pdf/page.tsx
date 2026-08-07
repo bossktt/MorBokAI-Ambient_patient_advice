@@ -167,7 +167,7 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
                 href={downloadUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-[#003366] hover:bg-[#002244] text-white flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                className="w-full py-3.5 px-4 rounded-xl font-extrabold text-sm bg-[#006d33] hover:bg-[#005225] text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-[0.98]"
               >
                 <span className="material-symbols-outlined text-xl">download</span>
                 <span>เปิดดู / ดาวน์โหลดเอกสาร PDF (Download PDF)</span>
@@ -176,17 +176,8 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
 
             <button
               type="button"
-              onClick={() => router.push(`/doctor/encounter/${encounterId}/review`)}
-              className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-white hover:bg-[#e6f0ff] text-[#003366] border border-[#003366]/40 flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-[0.98]"
-            >
-              <span className="material-symbols-outlined text-xl">edit</span>
-              <span>ย้อนกลับไปแก้ไขข้อมูล (ขั้นตอนที่ 4)</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleStartNextCase}
-              className="w-full py-3.5 px-4 rounded-xl font-extrabold text-sm bg-[#006d33] hover:bg-[#005225] text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-[0.98]"
+              className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-white hover:bg-[#f0f3ff] text-[#001e40] border border-[#c3c6d1] flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
             >
               <span className="material-symbols-outlined text-xl">restart_alt</span>
               <span>เริ่มต้นตรวจเคสถัดไป (Start Next Case)</span>
@@ -199,7 +190,7 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
 
       {/* Footer */}
       <footer className="w-full py-4 text-center text-xs text-slate-500 border-t border-[#c3c6d1] bg-white">
-        MorBok Ambient Care Assistant • Step 5/5 PDF Delivery
+        MorBok Ambient Care Assistant • Step 5 PDF Delivery
       </footer>
     </div>
   );
