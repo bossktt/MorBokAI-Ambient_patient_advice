@@ -108,7 +108,8 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         })
         .catch((err) => {
           console.warn('Microphone notice:', err);
-          setDebugInfo((d) => `${d}\n❌ mic denied: ${err?.name || err}`);
+          const micErr = err instanceof Error ? err.name : String(err);
+          setDebugInfo((d) => `${d}\n❌ mic denied: ${micErr}`);
         });
     }
 
@@ -249,7 +250,8 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         }
       } catch (e) {
         console.warn('Backend transcription failed:', e);
-        setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${e?.message || e}`);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${errMsg}`);
       }
     } else {
       setDebugInfo((d) => `${d}\n⚠️ no chunks recorded (${mimeTypeRef.current})`);
