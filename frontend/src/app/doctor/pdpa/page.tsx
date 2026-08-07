@@ -70,9 +70,8 @@ export default function PDPADisclaimerPage() {
         {/* Step Indicator */}
         <div className="w-full flex items-center justify-between mb-6 px-1">
           <span className="text-xs font-extrabold text-[#003366] uppercase tracking-wider bg-[#e6f0ff] px-3 py-1 rounded-full border border-[#b3c8ff]">
-            ขั้นตอนที่ 2 จาก 5: คำยืนยัน PDPA & ความปลอดภัย
+            ขั้นตอนที่ 2: คำยืนยัน PDPA & ความปลอดภัย
           </span>
-          <span className="text-xs font-bold text-slate-500">Step 2/5</span>
         </div>
 
         {/* Doctor Summary Tag */}

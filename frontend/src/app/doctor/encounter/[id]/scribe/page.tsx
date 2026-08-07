@@ -296,9 +296,8 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         {/* Step Indicator */}
         <div className="w-full flex items-center justify-between mb-3">
           <span className="text-xs font-extrabold text-[#003366] uppercase tracking-wider bg-[#e6f0ff] px-3 py-1 rounded-full border border-[#b3c8ff]">
-            ขั้นตอนที่ 3 จาก 5: อัดเสียงบันทึกบทสนทนา
+            ขั้นตอนที่ 3: อัดเสียงบันทึกบทสนทนา
           </span>
-          <span className="text-xs font-bold text-slate-500">Step 3/5</span>
         </div>
 
         {/* PDPA Warning Reminder Banner */}

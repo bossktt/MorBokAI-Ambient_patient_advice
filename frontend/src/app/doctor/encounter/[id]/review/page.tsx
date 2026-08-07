@@ -193,9 +193,8 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         {/* Step Indicator */}
         <div className="w-full flex items-center justify-between">
           <span className="text-xs font-extrabold text-[#003366] uppercase tracking-wider bg-[#e6f0ff] px-3 py-1 rounded-full border border-[#b3c8ff]">
-            ขั้นตอนที่ 4 จาก 5: ตรวจสอบ & ยืนยันโน้ต
+            ขั้นตอนที่ 4: ตรวจสอบ & ยืนยันโน้ต
           </span>
-          <span className="text-xs font-bold text-slate-500">Step 4/5</span>
         </div>
 
         {/* Doctor Info Header Banner */}

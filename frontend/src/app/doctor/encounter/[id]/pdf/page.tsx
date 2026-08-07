@@ -87,7 +87,7 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
         {/* Step Indicator */}
         <div className="w-full flex items-center justify-between mb-4">
           <span className="text-xs font-extrabold text-[#003366] uppercase tracking-wider bg-[#e6f0ff] px-3 py-1 rounded-full border border-[#b3c8ff]">
-            ขั้นตอนที่ 5 จาก 5: QR Code รับเอกสาร PDF
+            ขั้นตอนที่ 5: QR Code รับเอกสาร PDF
           </span>
           <button
             type="button"
@@ -95,7 +95,7 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
             className="text-xs font-bold text-[#003366] hover:bg-[#e6f0ff] bg-white px-2.5 py-1 rounded-lg border border-[#003366]/30 flex items-center gap-1 cursor-pointer shadow-2xs transition-colors"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
-            แก้ไข Step 4
+            แก้ไขขั้นตอนที่ 4
           </button>
         </div>
 
