@@ -32,11 +32,13 @@ class Settings(BaseSettings):
 
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
+    GCP_KEY_PATH: Optional[str] = "gcp-key.json"
 
-    # Logging Configuration
+    # Logging & Google Drive Auto-Sync Configuration
     ENABLE_ENCOUNTER_LOGGING: bool = True
     LOGS_DIR: str = os.path.join(BASE_DIR, "backend", "logs")
     LOG_FILE_NAME: str = "encounter_logs.jsonl"
+    GDRIVE_WEBHOOK_URL: Optional[str] = None
 
     class Config:
         env_file = (ROOT_ENV, ".env")

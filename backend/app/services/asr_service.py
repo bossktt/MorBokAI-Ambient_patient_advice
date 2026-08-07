@@ -189,7 +189,7 @@ class MultiTierASRService:
         # =========================================================================
         # STEP 3: Tertiary ASR - Google Speech-to-Text (gcp-key.json)
         # =========================================================================
-        gcp_key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or settings.GCP_KEY_PATH
+        gcp_key_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or getattr(settings, "GCP_KEY_PATH", "gcp-key.json")
         if not os.path.isabs(gcp_key_path):
             backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             project_root = os.path.dirname(backend_dir)

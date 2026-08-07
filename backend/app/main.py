@@ -66,8 +66,10 @@ LOGS_DIR = settings.LOGS_DIR
 os.makedirs(LOGS_DIR, exist_ok=True)
 LOG_FILE_PATH = os.path.join(LOGS_DIR, settings.LOG_FILE_NAME)
 
+from app.services.gdrive_sync import sync_log_to_gdrive_async
+
 def append_encounter_log(log_data: dict):
-    """Appends encounter record to backend/logs/encounter_logs.jsonl for Google Drive sync."""
+    """Appends encounter record to backend/logs/encounter_logs.jsonl and auto-syncs to Google Drive."""
     if not settings.ENABLE_ENCOUNTER_LOGGING:
         return
     try:
@@ -75,6 +77,9 @@ def append_encounter_log(log_data: dict):
             f.write(json.dumps(log_data, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"⚠️ Failed to write encounter log: {e}")
+    
+    # Auto-sync log to Google Drive (non-blocking background thread)
+    sync_log_to_gdrive_async(log_data)
 
 # Metadata store for PDF expiry tracking (pdf_id -> {file_path, expires_at})
 pdf_metadata_store: Dict[str, Dict[str, Any]] = {}
