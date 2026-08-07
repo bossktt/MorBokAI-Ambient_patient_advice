@@ -323,7 +323,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
           {doctorInfo && (
             <div className="text-xs text-[#003366] font-bold">
-              👨‍⚕️ นพ./พญ. {doctorInfo.first_name} {doctorInfo.surname} (ว.{doctorInfo.license_no})
+              👨‍⚕️ แพทย์ {doctorInfo.first_name} {doctorInfo.surname} ({doctorInfo.license_no.replace(/\D/g, '') ? `ว.${doctorInfo.license_no.replace(/\D/g, '')}` : doctorInfo.license_no})
             </div>
           )}
 
@@ -349,9 +349,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
             className="relative z-10 w-36 h-36 rounded-full bg-[#BA1A1A] hover:bg-[#93000A] text-white shadow-[0_8px_24px_rgba(186,26,26,0.35)] flex flex-col items-center justify-center transition-transform hover:scale-105 active:scale-95 group cursor-pointer border-4 border-red-200"
           >
             <span className="material-symbols-outlined text-[52px] group-hover:scale-110 transition-transform duration-300">
-              stop
+              {isProcessing ? 'sync' : 'stop'}
             </span>
-            <span className="text-xs font-black tracking-wide mt-1">หยุดบันทึกเสียง</span>
+            <span className="text-xs font-black tracking-wide mt-1 text-center px-1">
+              {isProcessing ? 'กำลังประมวลผล...' : 'บันทึกเสียงเสร็จสิ้น (End)'}
+            </span>
           </button>
         </div>
 
@@ -388,12 +390,12 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
       {/* Bottom Floating Control Bar with Pause Button */}
       <footer className="fixed bottom-0 w-full z-50 rounded-t-2xl bg-white shadow-[0_-4px_16px_rgba(0,51,102,0.1)] border-t border-[#C3C6D1] py-3 px-4">
-        <div className="flex items-center justify-between max-w-[480px] mx-auto gap-3">
+        <div className="flex items-center justify-center max-w-[480px] mx-auto">
           {/* Pause / Resume Button */}
           <button
             type="button"
             onClick={handleTogglePause}
-            className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all cursor-pointer shadow-sm ${
+            className={`w-full py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all cursor-pointer shadow-sm ${
               isPaused
                 ? 'bg-[#006D33] text-white border-[#006D33] hover:bg-[#005225]'
                 : 'bg-[#FEF7E0] text-[#B06000] border-[#B06000]/40 hover:bg-[#fdeec2]'
@@ -403,17 +405,6 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
               {isPaused ? 'play_arrow' : 'pause'}
             </span>
             <span>{isPaused ? 'บันทึกเสียงต่อ (Resume)' : 'พักการบันทึกเสียง (Pause)'}</span>
-          </button>
-
-          {/* Main Stop Action in Bottom Bar */}
-          <button
-            type="button"
-            onClick={handleStopScribe}
-            disabled={isProcessing}
-            className="flex-1 py-3 px-4 rounded-xl font-extrabold text-sm bg-[#BA1A1A] hover:bg-[#93000A] text-white flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-xl">stop</span>
-            <span>{isProcessing ? 'กำลังประมวลผล...' : 'เสร็จสิ้น & ถัดไป'}</span>
           </button>
         </div>
       </footer>

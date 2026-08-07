@@ -80,10 +80,10 @@ export default function PDPADisclaimerPage() {
           <div className="w-full bg-[#f0f3ff] border border-[#c3c6d1] rounded-xl p-3 mb-4 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 font-bold text-[#001e40]">
               <span className="material-symbols-outlined text-[#006d33]">account_circle</span>
-              <span>นพ./พญ. {doctorInfo.first_name} {doctorInfo.surname}</span>
+              <span>แพทย์ {doctorInfo.first_name} {doctorInfo.surname}</span>
             </div>
             <span className="bg-white px-2 py-0.5 rounded border border-[#c3c6d1] font-mono font-bold text-[#003366]">
-              {doctorInfo.license_no}
+              {doctorInfo.license_no.replace(/\D/g, '') ? `ว.${doctorInfo.license_no.replace(/\D/g, '')}` : doctorInfo.license_no}
             </span>
           </div>
         )}

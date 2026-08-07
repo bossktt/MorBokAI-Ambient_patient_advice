@@ -42,7 +42,7 @@ export default function DoctorInputPage() {
     // Extract digits to validate 4 to 6 digits
     const digitsOnly = cleanLicenseInput.replace(/\D/g, '');
     if (digitsOnly.length < 4 || digitsOnly.length > 6) {
-      setErrorMsg('เลขประจำตัวประกอบวิชาชีพเวชกรรมต้องเป็นตัวเลข 4 ถึง 6 หลัก (เช่น 48912 หรือ 123456)');
+      setErrorMsg('เลขที่ใบประกอบวิชาชีพเวชกรรมต้องเป็นตัวเลข 4 ถึง 6 หลัก (เช่น 48912 หรือ 123456)');
       return;
     }
 
@@ -151,7 +151,7 @@ export default function DoctorInputPage() {
             <label className="text-xs font-bold text-[#001e40] flex items-center justify-between">
               <span className="flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm text-[#003366]">pin</span>
-                <span>เลขประจำตัวประกอบวิชาชีพเวชกรรม *</span>
+                <span>เลขที่ใบประกอบวิชาชีพเวชกรรม *</span>
               </span>
               <span className="text-[10px] text-slate-500 font-normal">(ตัวเลข 4 - 6 หลัก)</span>
             </label>
@@ -187,7 +187,7 @@ export default function DoctorInputPage() {
               }}
               className="w-full text-center text-xs text-[#006d33] hover:underline bg-[#e6f4ea] py-2 rounded-lg font-bold border border-[#006d33]/20 cursor-pointer"
             >
-              ⚡ ใช้ข้อมูลแพทย์ทดสอบ (นพ. วินัย ให้คำแนะนำ ว.12345)
+              ⚡ ใช้ข้อมูลแพทย์ทดสอบ (แพทย์ วินัย ให้คำแนะนำ ว.12345)
             </button>
           </div>
 

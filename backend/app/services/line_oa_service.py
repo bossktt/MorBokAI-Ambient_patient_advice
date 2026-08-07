@@ -69,7 +69,7 @@ class LineOAService:
                         "contents": [
                             {
                                 "type": "text",
-                                "text": "🩺 ข้อวินิจฉัยโรค (Diagnosis)",
+                                "text": "🩺 วินิจฉัยโรค (Diagnosis)",
                                 "weight": "bold",
                                 "color": "#0F4C81",
                                 "size": "sm"

@@ -203,10 +203,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           <div className="space-y-0.5 text-left">
             <div className="text-xs text-slate-300 font-bold uppercase tracking-wide">แพทย์ผู้ยืนยันโน้ต</div>
             <div className="text-base font-extrabold">
-              {isAnonymous ? 'ไม่ระบุชื่อและนามสกุล' : `นพ./พญ. ${doctorInfo.first_name} ${doctorInfo.surname}`}
+              {isAnonymous ? 'ไม่ระบุชื่อและนามสกุล' : `แพทย์ ${doctorInfo.first_name} ${doctorInfo.surname}`}
             </div>
             <div className="text-xs text-slate-200">
-              เลขประกอบวิชาชีพ: <span className="font-mono font-bold text-[#75f999]">{isAnonymous ? 'ไม่เปิดเผย' : doctorInfo.license_no}</span>
+              เลขประกอบวิชาชีพ: <span className="font-mono font-bold text-[#75f999]">{isAnonymous ? 'ไม่เปิดเผย' : (doctorInfo.license_no.replace(/\D/g, '') ? `ว.${doctorInfo.license_no.replace(/\D/g, '')}` : doctorInfo.license_no)}</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/20">
@@ -253,7 +253,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             <div className="flex justify-between items-center border-b border-[#C3C6D1]/60 pb-2.5">
               <div className="flex items-center gap-2 text-[#003366]">
                 <span className="material-symbols-outlined text-xl">stethoscope</span>
-                <h2 className="font-bold text-sm text-[#001E40]">1. ข้อวินิจฉัยโรค (Diagnosis)</h2>
+                <h2 className="font-bold text-sm text-[#001E40]">1. วินิจฉัยโรค (Diagnosis)</h2>
               </div>
             </div>
             <textarea
