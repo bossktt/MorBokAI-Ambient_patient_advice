@@ -380,12 +380,6 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
             className="w-full bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl p-3 text-xs text-[#111C2C] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#006D33] font-medium leading-relaxed"
           />
 
-          {/* Debug / diagnostics panel */}
-          {debugInfo && (
-            <pre className="w-full bg-[#111c2c] text-[#75f999] rounded-xl p-3 text-[10px] leading-relaxed whitespace-pre-wrap overflow-x-auto">
-              {debugInfo}
-            </pre>
-          )}
         </div>
 
       </main>
