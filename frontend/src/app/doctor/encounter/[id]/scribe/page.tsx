@@ -358,16 +358,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           </button>
         </div>
 
-        {/* Quick Test Preset Scenario Action (Transcript Hidden) */}
-        <div className="w-full flex justify-end mb-6">
-          <button
-            type="button"
-            onClick={handleLoadPresetScenario}
-            className="text-[#006D33] hover:underline bg-[#F0F3FF] px-3 py-1.5 rounded-lg border border-[#006D33]/30 font-bold cursor-pointer text-xs flex items-center gap-1 shadow-2xs"
-          >
-            ⚡ โหลดบทสนทนาตัวอย่าง ED
-          </button>
-        </div>
+
 
       </main>
 
