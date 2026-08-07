@@ -358,27 +358,15 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           </button>
         </div>
 
-        {/* Live Speech-to-Text Transcript Box */}
-        <div className="w-full space-y-2 text-left bg-white border border-[#C3C6D1] rounded-2xl p-4 shadow-sm mb-6">
-          <div className="flex items-center justify-between text-xs font-bold text-[#001E40]">
-            <span>💬 ข้อความถอดเสียงสด (Live Transcript):</span>
-            <button
-              type="button"
-              onClick={handleLoadPresetScenario}
-              className="text-[#006D33] hover:underline bg-[#F0F3FF] px-2.5 py-1 rounded-lg border border-[#006D33]/30 font-semibold cursor-pointer text-[11px]"
-            >
-              ⚡ โหลดบทสนทนาตัวอย่าง ED
-            </button>
-          </div>
-
-          <textarea
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            placeholder="ลองพูดใส่ไมโครโฟนภาษาไทย หรือกดปุ่มด้านบนเพื่อใช้บทสนทนาตัวอย่าง..."
-            rows={4}
-            className="w-full bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl p-3 text-xs text-[#111C2C] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#006D33] font-medium leading-relaxed"
-          />
-
+        {/* Quick Test Preset Scenario Action (Transcript Hidden) */}
+        <div className="w-full flex justify-end mb-6">
+          <button
+            type="button"
+            onClick={handleLoadPresetScenario}
+            className="text-[#006D33] hover:underline bg-[#F0F3FF] px-3 py-1.5 rounded-lg border border-[#006D33]/30 font-bold cursor-pointer text-xs flex items-center gap-1 shadow-2xs"
+          >
+            ⚡ โหลดบทสนทนาตัวอย่าง ED
+          </button>
         </div>
 
       </main>

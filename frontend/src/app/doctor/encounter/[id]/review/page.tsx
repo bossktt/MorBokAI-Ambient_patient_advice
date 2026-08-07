@@ -243,18 +243,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           </p>
         </div>
 
-        {/* Live Audio Transcript Reference Box */}
-        {rawTranscript && (
-          <div className="bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl p-3.5 text-xs space-y-1 shadow-sm text-left">
-            <span className="text-[#001E40] font-bold flex items-center gap-1">
-              <span className="material-symbols-outlined text-[16px]">record_voice_over</span>
-              ข้อความถอดเสียงจริงจากห้องตรวจ (Raw Transcript):
-            </span>
-            <p className="text-[#43474F] italic bg-white p-2.5 rounded-lg border border-[#C3C6D1] leading-relaxed">
-              {rawTranscript}
-            </p>
-          </div>
-        )}
+
 
         {/* LLM Processing Overlay */}
         {isGeneratingLLM && (
