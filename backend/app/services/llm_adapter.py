@@ -23,48 +23,42 @@ class BaseLLMAdapter(ABC):
 
 
 # Shared clinical prompt template
-CLINICAL_SYSTEM_PROMPT = """You are an expert AI Clinical Summarizer and Patient Communication Specialist integrated into the Ambient PVS Platform. Your primary function is to transform spoken physician consultations (or de-identified transcripts) into clear, structured, and easy-to-understand summaries in plain Thai (Grade 5 reading level) for patients and family caregivers.
+CLINICAL_SYSTEM_PROMPT = """คุณคือระบบช่วยแพทย์ในห้องฉุกเฉิน (Emergency Department, Thailand).
+อ่านบทสนทนาห้องตรวจที่ถอดเสียง แล้วสร้างสรุปภาษาไทยที่คนทั่วไปอ่านเข้าใจ
 
-🎯 CORE OBJECTIVES:
-1. Clear Patient Communication: Convert medical terminology into plain, empathetic Thai that elderly patients and non-medical caregivers can easily comprehend.
-2. Medication Safety & Reconciliation: Categorize all medication changes into START (ยาเริ่มใหม่), STOP (ยาให้หยุดทานทันที), and CHANGE (ยาปรับขนาดยา) to prevent accidental double-dosing or adverse drug interactions.
-3. Emergency Red Flags: Clearly highlight warning symptoms that require immediate emergency evaluation.
-4. Strict Fidelity & Zero Hallucination: Rely ONLY on facts explicitly stated in the consultation audio/transcript. Do not invent diagnoses, dosages, or advice not mentioned by the doctor.
+⚠️ ห้ามเด็ดขาด:
+- ห้ามใช้ความรู้ส่วนตัวแต่งข้อมูล หากบทสนทนาไม่ได้ระบุ ให้เว้นว่างหรือใช้ array เปล่า []
+- ห้ามคาดเดาชื่อยา ตัวสะกดยา ขนาดยา วิธีทาน หรือวันนัดที่แพทย์ไม่ได้พู​ด
+- ห้ามแปลศัพท์แพทย์เป็นไทยผิด — หากไม่แน่ใจ ให้คงคำภาษาอังกฤษไว้ในวงเล็บ
+- ห้ามใส่คำแนะนำเกี่ยวกับยาใน key_instructions — ข้อมูลยาทั้งหมดต้องอยู่ใน medication_box
 
-📐 REQUIRED JSON OUTPUT STRUCTURE:
-Return strictly valid JSON matching this schema:
+📐 ขั้นตอน:
+1. วิเคราะห์บทสนทนา — มีการพูดถึงอะไรบ้าง: อาการ? ยา? การนัด?
+2. สรุปเฉพาะสิ่งที่พบ หากไม่มีข้อมูลในส่วนใด ให้เว้นว่างหรือใส่ array เปล่า
+3. เขียนเป็นภาษาไทยง่าย ๆ ที่คนอายุ 60+ อ่านเข้าใจ
+
+📤 ส่ง JSON เท่านี้ (ห้ามใส่ข้อความอื่น):
 {{
   "patient_view": {{
-    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับผู้ป่วย",
-    "diagnosis": "ระบุข้อวินิจฉัยโรคภาษาไทยอ่านง่าย พร้อมภาษาอังกฤษในวงเล็บ",
-    "key_instructions": [
-      "คำแนะนำการปฏิบัติตัวข้อที่ 1",
-      "คำแนะนำการปฏิบัติตัวข้อที่ 2"
-    ],
-    "red_flags": [
-      "อาการผิดปกติที่ต้องรีบมาโรงพยาบาลทันทีข้อที่ 1"
-    ],
+    "headline": "สรุปคำแนะนำ",
+    "diagnosis": "ข้อวินิจฉัยภาษาไทย (อังกฤษในวงเล็บ) — ถ้าไม่ระบุ ให้ใช้ 'อาการทั่วไป (General Symptoms)'",
+    "key_instructions": ["คำแนะนำ (ห้ามใส่ชื่อยา/ขนาดยา — ยาต้องอยู่ใน medication_box)"],
+    "home_care": ["การดูแลที่บ้าน (ถ้าไม่มี = [])"],
+    "red_flags": ["อาการที่ต้องกลับห้องฉุกเฉินทันที"],
     "follow_up": {{
-      "follow_up_date_thai": "กำหนดนัดติดตามอาการ (เช่น อีก 1 สัปดาห์ / วันพุธหน้า)",
-      "purpose": "วัตถุประสงค์ในการนัดติดตามอาการและการตรวจเพิ่มเติม"
+      "date": "วันนัด (ถ้าไม่มี = 'ไม่มีนัด')",
+      "location": "สถานที่",
+      "reason": "เหตุผล"
     }}
   }},
-  "caregiver_matrix": {{
-    "medication_reconciliation": {{
-      "start": [
-        {{ "med_name": "ชื่อยาใหม่", "physical_description": "ลักษณะยา", "instructions": "วิธีทาน" }}
-      ],
-      "stop": [
-        {{ "med_name": "ชื่อยาที่ต้องหยุด", "physical_description": "ลักษณะยา", "discard_instruction": "คำแนะนำการหยุด/ทิ้ง", "reason": "สาเหตุ" }}
-      ],
-      "change": [
-        {{ "med_name": "ชื่อยาที่ปรับขนาด", "physical_description": "ลักษณะยา", "change_summary": "วิธีทานใหม่" }}
-      ]
-    }}
+  "medication_box": {{
+    "start": [{{ "name": "ชื่อยาใหม่", "appearance": "ลักษณะเม็ด/สี", "how_to_take": "วิธีทาน" }}],
+    "stop": [{{ "name": "ยาหยุด", "appearance": "ลักษณะ", "action": "หยุด/ทิ้ง", "reason": "เหตุผล" }}],
+    "change": [{{ "name": "ยาปรับ", "appearance": "ลักษณะ", "new_instruction": "วิธีใหม่", "reason": "เหตุผล" }}]
   }}
 }}
 
-ข้อความถอดเสียงห้องตรวจจริงสำหรับเคสนี้:
+บทสนทนา:
 {sanitized_prompt}
 """
 
@@ -150,284 +144,261 @@ class GeminiAdapter(BaseLLMAdapter):
 
     @staticmethod
     def _fallback_demo_summary(sanitized_prompt: str = "") -> dict:
-        """
-        Emergency Department (ED) Fallback Clinical Summaries.
-        Covers 8 common ED chief complaint patterns + 1 default general fallback condition.
-        """
         prompt_lower = (sanitized_prompt or "").lower()
 
-        # Palpitations Pattern (ใจสั่น / หัวใจเต้นเร็ว)
-        if any(w in prompt_lower for w in ["ใจสั่น", "palpitations"]):
-            return {
-                "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการใจสั่น",
-                    "diagnosis": "ภาวะใจสั่นและหัวใจเต้นผิดจังหวะชั่วคราว (Palpitations / Rule out Arrhythmia)",
-                    "key_instructions": [
-                        "พักผ่อนในที่อากาศถ่ายเทสะดวก หลีกเลี่ยงกาแฟ ชา เครื่องดื่มชูกำลัง และบุหรี่",
-                        "สังเกตอาการหากมีอาการเวียนศีรษะหรือหน้ามืดให้นั่งพักทันที"
-                    ],
-                    "red_flags": ["มีอาการเจ็บแน่นหน้าอก หายใจลำบาก หรือหน้ามืดหมดสติ ให้มารพ. ทันที"],
-                    "follow_up": {"follow_up_date_thai": "นัดตรวจคลินิกโรคหัวใจ 1 สัปดาห์"}
-                },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [], "stop": [], "change": []
-                    }
-                }
-            }
+        base = {
+            "patient_view": {
+                "headline": "สรุปคำแนะนำหลังออกจากห้องฉุกเฉิน",
+                "diagnosis": "อาการทั่วไปที่พบในห้องฉุกเฉิน (General ED Discharge)",
+                "key_instructions": [
+                    "สังเกตอาการตนเองอย่างใกล้ชิด หากอาการแย่ลง ให้กลับมาพบแพทย์ทันที",
+                    "พักผ่อนให้เพียงพอและดื่มน้ำสะอาดอย่างน้อยวันละ 8 แก้ว",
+                    "รับประทานยาตามที่แพทย์หรือเภสัชกรแนะนำอย่างเคร่งครัด"
+                ],
+                "red_flags": ["มีอาการผิดปกติรุนแรงขึ้น เช่น เจ็บแน่นหน้าอก หายใจลำบาก ซึมลง หรือหมดสติ"],
+                "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้น", "location": "", "reason": ""}
+            },
+            "medication_box": {"start": [], "stop": [], "change": []}
+        }
 
-        # Pattern 1: Chest Pain / Cardiopulmonary (ปวดแน่นหน้าอก / กล้ามเนื้อหัวใจ)
-        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจ", "chest pain"]):
-            return {
-                "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการเจ็บแน่นหน้าอก",
-                    "diagnosis": "ภาวะเจ็บแน่นหน้าอกชั่วคราว (unstable angina / Rule out Chronic Coronary Syndrome)",
-                    "key_instructions": [
-                        "อมยาใต้ลิ้น ทันที 1 เม็ด เมื่อเริ่มมีอาการเจ็บแน่นหน้าอก ทานได้ทุก 15 นาที แต่ถ้าไม่หายเลยให้มารพ ",
-                        "หลีกเลี่ยงการออกกำลังหนัก การยกของหนัก และภาวะเครียดบวมตระหนก",
-                        "พักผ่อนให้เพียงพอ งดสูบบุหรี่ และงดอาหารที่มีไขมันสูง"
-                    ],
-                    "red_flags": ["หากมีอาการแน่นหน้าอกรุนแรง เหงื่อออกตัวเย็น ร้าวไปที่แขนซ้ายหรือกราม ให้โทร 1669 มาโรงพยาบาลทันที"],
-                    "follow_up": {"follow_up_date_thai": "เดี๋ยวถ้ามีอาการให้มาโรงพยบาล"}
-                },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Isordil 5 mg", "physical_description": "ยาเม็ดเล็กสีขาว", "instructions": "อมใต้ลิ้น 1 เม็ด ทันทีที่มีอาการเจ็บแน่นหน้าอก"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาแก้ปวดคลายกล้ามเนื้อเดิม (NSAIDs)", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานทันที", "reason": "อาจเพิ่มความเสี่ยงต่อโรคหัวใจและหลอดเลือด"}
-                        ],
-                        "change": [
-                            
-                        ]
-                    }
-                }
-            }
-
-        # Pattern 2: Acute Abdominal Pain / GI (ปวดท้องเฉียบพลัน / กระเพาะอักเสบ / ลำไส้อักเสบ)
-        if any(w in prompt_lower for w in ["ปวดท้อง", "กระเพาะ", "ท้องเสีย", "ถ่ายเหลว", "อาเจียน", "คลื่นไส้", "abdominal pain"]):
-            return {
-                "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการปวดท้อง / ลำไส้อักเสบ",
-                    "diagnosis": "ภาวะกระเพาะอาหารและลำไส้อักเสบเฉียบพลัน (Acute Gastroenteritis / Acute Gastritis)",
-                    "key_instructions": [
-                        "จิบน้ำเกลือแร่ ORS ทีละน้อยตลอดทั้งวัน เพื่อป้องกันร่างกายช็อกจากการขาดน้ำ",
-                        "รับประทานอาหารอ่อน ย่อยง่าย รสไม่จัด เช่น โจ๊ก ข้าวต้ม งดนมและอาหารมันจัด",
-                        "ทานยาแก้ปวดเกร็งท้อง (Hyoscine) ก่อนอาหารเมื่อมีอาการปวดเกร็ง"
-                    ],
-                    "red_flags": ["ถ่ายอุจจาระมีมูกเลือด ปวดท้องรุนแรงกดเจ็บด้านขวาล่าง หรือมีไข้สูงหนาวสั่น"],
-                    "follow_up": {"follow_up_date_thai": "ยังไม่มีนัด (หากถ่ายเหลวเกิน 3 วัน หรือกินอาหารไม่ได้ ให้กลับมาพบแพทย์)"}
-                },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "ผงเกลือแร่ ORS", "physical_description": "ซองผงชงน้ำ", "instructions": "ละลายน้ำสะอาด 1 ซอง จิบแทนน้ำเมื่อถ่ายเหลว"},
-                            {"med_name": "Hyoscine 10 mg", "physical_description": "ยาเม็ดกลมสีขาว", "instructions": "1 เม็ด ก่อนอาหาร 3 มื้อ เวลามีอาการปวดเกร็ง"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาแก้ปวดกลุ่ม NSAIDs เดิม", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานทันที", "reason": "ระคายเคืองกระเพาะอาหารและทำให้ปวดท้องรุนแรงขึ้น"}
-                        ],
-                        "change": [
-                            
-                        ]
-                    }
-                }
-            }
-
-        # Pattern 3:  Dizziness / Severe Headache (เวียนศีรษะ / ปวดศีรษะ)
-        if any(w in prompt_lower for w in ["ความดัน", "เวียนหัว", "เวียนศีรษะ", "บ้านหมุน", "ปวดหัว", "ปวดศีรษะ", "hypertension"]):
-            return {
-                "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับภาวะความดันโลหิตสูงและเวียนศีรษะ",
-                    "diagnosis": "  อาการเวียนศีรษะ (Vertigo)",
-                    "key_instructions": [
-                        "ลุกจากที่นอนช้าๆ",
-                        "หลีกเลี่ยงการขับรถ หรือทำงานกับเครื่องจักร ช่วงที่มีอาการ",
-                        "หากมีอาการปวดศีรษะร่วมด้วย ให้รีบมาพบแพทย์"
-                    ],
-                    "red_flags": ["มีอาการแขนขาอ่อนแรงครึ่งซีก ปากเบี้ยว พูดไม่ชัด หรือปวดศีรษะรุนแรงเฉียบพลัน"],
-                    "follow_up": {"follow_up_date_thai": "นัดห้องตรวจหู คอ จมูก สัปดาห์หน้า"}
-                },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Dimenhydrinate 50 mg", "physical_description": "ยาเม็ดสีเหลืองกลม", "instructions": "1 เม็ด ทานได้ทุก 8 ชั่วโมง"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาแก้เวียนศีรษะซองเก่า", "physical_description": "ซองเดิม", "discard_instruction": "หยุดทานเมื่อหายเวียนศีรษะ", "reason": "รับประทานเฉพาะเมื่อมีอาการเท่านั้น"}
-                        ],
-                        "change": [
-                           
-                        ]
-                    }
-                }
-            }
-
-        # Pattern 4: Respiratory / Asthma / Shortness of Breath (หอบหืด / หายใจเหนื่อย / หลอดลมอักเสบ)
+        # Respiratory
         if any(w in prompt_lower for w in ["หอบ", "เหนื่อย", "หายใจ", "หอบหืด", "หลอดลม", "asthma", "dyspnea"]):
             return {
+                **base,
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับโรคหอบหืดและทางเดินหายใจ",
-                    "diagnosis": "โรคหอบหืดกำเริบเฉียบพลัน / หลอดลมอักเสบ (Acute Asthma Exacerbation / Acute Bronchitis)",
-                    "key_instructions": [
-                        "สูดพ่นยาขยายหลอดลม (Ventolin Evohaler) 2 ปั๊ม ทันทีที่มีอาการหอบเหนื่อย",
-                        "บ้วนปากและคอด้วยน้ำสะอาดทุกครั้งหลังใช้สูดยาสเตียรอยด์เพื่อป้องกันเชื้อราในปาก",
-                        "หลีกเลี่ยงควันบุหรี่ ควันธูป ควันไฟ ฝุ่น PM2.5 และสารก่อภูมิแพ้"
-                    ],
-                    "red_flags": ["หายใจมีเสียงหวีดรุนแรง พูดได้ไม่เป็นประโยค หายใจปีกจมูกบาน หรือริมฝีปากเขียวคล้ำ ให้มาโรงพยาบาล"],
-                    "follow_up": {"follow_up_date_thai": "นัดดูอาการคลินิกโรคระบบหายใจ สัปดาห์หน้า"}
+                    "headline": "สรุปคำแนะนำสำหรับอาการหอบเหนื่อย",
+                    "diagnosis": "หลอดลมอักเสบเฉียบพลันหรือหอบหืดกำเริบ (Acute Bronchitis / Asthma Exacerbation)",
+                    "key_instructions": ["พ่นยาขยายหลอดลมตามแพทย์สั่งเมื่อมีอาการ", "หลีกเลี่ยงควันบุหรี่และฝุ่นละออง", "ดื่มน้ำอุ่นเพื่อช่วยละลายเสมหะ"],
+                    "red_flags": ["หายใจมีเสียงหวีดรุนแรง พูดเป็นประโยคไม่ได้ ริมฝีปากเขียว"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากหอบไม่ดีขึ้นใน 24 ชั่วโมง", "location": "", "reason": ""}
                 },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Ventolin Inhaler 100 mcg", "physical_description": "หลอดพ่นสีฟ้า", "instructions": "สูดพ่น 2 ปั๊ม เวลามีอาการหอบเหนื่อย"},
-                            {"med_name": "Prednisolone 5 mg", "physical_description": "ยาเม็ดสีขาวเล็ก", "change_summary": "ทาน 6 เม็ด หลังอาหารเช้าทันที ติดต่อกัน 5 วันแล้วหยุด"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาแก้ไอชนิดน้ำเชื่อมที่มีโคเดอีน", "physical_description": "ขวดเดิม", "discard_instruction": "หยุดทานทันที", "reason": "อาจกดการหายใจทำให้หอบเหนื่อยมากขึ้น"}
-                        ],
-                        "change": [
-                            
-                        ]
-                    }
-                }
+                "medication_box": {"start": [], "stop": [], "change": []}
             }
 
-        # Pattern 5: Fever / Infection / Flu (ไข้สูง / ไข้หวัดใหญ่ / ติดเชื้อ)
+        # Cardiac
+        if any(w in prompt_lower for w in ["หน้าอก", "แน่นหน้าอก", "เจ็บหน้าอก", "หัวใจ", "chest pain", "ใจสั่น", "palpitations"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับอาการเจ็บแน่นหน้าอก",
+                    "diagnosis": "อาการเจ็บแน่นหน้าอกหรือใจสั่น (Chest Pain / Palpitations — Rule out ACS)",
+                    "key_instructions": ["พักผ่อน หลีกเลี่ยงการออกแรงหนัก", "งดกาแฟ ชา บุหรี่ และเครื่องดื่มชูกำลัง", "หากมีอาการแน่นหน้าอกให้นั่งพักและรีบไปโรงพยาบาล"],
+                    "red_flags": ["เจ็บแน่นหน้าอกรุนแรง เหงื่อออกตัวเย็น ร้าวไปแขนซ้ายหรือกราม ให้โทร 1669 ทันที"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากมีอาการอีก", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Abdominal
+        if any(w in prompt_lower for w in ["ปวดท้อง", "กระเพาะ", "ท้องเสีย", "ถ่ายเหลว", "อาเจียน", "คลื่นไส้", "abdominal pain"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับอาการปวดท้อง",
+                    "diagnosis": "กระเพาะอาหารและลำไส้อักเสบเฉียบพลัน (Acute Gastroenteritis / Gastritis)",
+                    "key_instructions": ["จิบน้ำเกลือแร่ ORS ทีละน้อยตลอดวัน", "รับประทานอาหารอ่อนย่อยง่าย หลีกเลี่ยงอาหารมันและนม"],
+                    "red_flags": ["ถ่ายอุจจาระมีมูกเลือด ปวดท้องรุนแรง หรือมีไข้สูง"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากถ่ายเหลวเกิน 3 วัน", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Dizziness
+        if any(w in prompt_lower for w in ["ความดัน", "เวียนหัว", "เวียนศีรษะ", "บ้านหมุน", "ปวดหัว", "ปวดศีรษะ", "hypertension"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับอาการเวียนศีรษะ",
+                    "diagnosis": "อาการเวียนศีรษะหรือภาวะความดันโลหิตสูง (Vertigo / Hypertensive Urgency)",
+                    "key_instructions": ["ลุกจากที่นอนช้า ๆ", "หลีกเลี่ยงการขับรถขณะมีอาการ", "พักในที่เงียบสงบ"],
+                    "red_flags": ["มีอาการแขนขาอ่อนแรง ปากเบี้ยว พูดไม่ชัด หรือปวดศีรษะรุนแรง"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้น", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Fever
         if any(w in prompt_lower for w in ["ไข้", "หนาวสั่น", "ไข้หวัด", "เจ็บคอ", "น้ำมูก", "หวัด", "fever"]):
             return {
+                **base,
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับโรคไข้หวัดธรรมดา / ไข้สูง",
-                    "diagnosis": "โรคไข้หวัดธรรมดา / ไข้หวัดใหญ่เฉียบพลัน (Common Cold / Acute Upper Respiratory Infection)",
-                    "key_instructions": [
-                        "เช็ดตัวลดไข้ด้วยน้ำธรรมดาอย่างสม่ำเสมอเมื่อมีไข้สูง",
-                        "รับประทานยาพาราเซตามอลเมื่อมีไข้ ห้ามทานเกินวันละ 8 เม็ด",
-                        "พักผ่อนให้เพียงพอและดื่มน้ำสะอาดวันละ 8-10 แก้ว"
-                    ],
-                    "red_flags": ["หากมีไข้สูงเกิน 39°C ติดต่อกันเกิน 3 วัน หรือมีจุดเลือดออกตามผิวหนัง ให้กลับมาพบแพทย์ทันที"],
-                    "follow_up": {"follow_up_date_thai": "ตามนัดหมายแพทย์ (หากอาการไม่ดีขึ้นใน 3 วัน ให้มาตรวจเพิ่มเติม)"}
+                    "headline": "สรุปคำแนะนำสำหรับไข้หวัด",
+                    "diagnosis": "โรคไข้หวัดใหญ่เฉียบพลัน (Common Cold / Acute URI)",
+                    "key_instructions": ["เช็ดตัวลดไข้ด้วยน้ำธรรมดา", "พักผ่อนให้เพียงพอและดื่มน้ำสะอาด", "หลีกเลี่ยงการสัมผัสใกล้ชิด"],
+                    "red_flags": ["ไข้สูงเกิน 39°C ติดต่อกันเกิน 3 วัน หรือมีจุดเลือดออกตามผิวหนัง"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้นใน 3 วัน", "location": "", "reason": ""}
                 },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Paracetamol 500 mg", "physical_description": "ยาเม็ดสีขาวกลม", "instructions": "1 เม็ด ทุก 4-6 ชั่วโมง เวลามีไข้สูง"},
-                            {"med_name": "Loratadine 10 mg", "physical_description": "ยาเม็ดเล็กสีขาว", "instructions": "1 เม็ด ก่อนนอน แก้แพ้ลดน้ำมูก"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาแก้ปวด Ibuprofen / Naproxen", "physical_description": "ซองเดิม", "discard_instruction": "งดรับประทานชั่วคราว", "reason": "ระวังภาวะเลือดออกง่ายในกรณีเป็นไข้เลือดออก"}
-                        ],
-                        "change": []
-                    }
-                }
+                "medication_box": {"start": [], "stop": [], "change": []}
             }
 
-        # Pattern 6: Diabetes / Hyperglycemia (เบาหวาน / น้ำตาลในเลือดสูง)
-        if any(w in prompt_lower for w in ["เบาหวาน", "น้ำตาล", "ปัสสาวะบ่อย", "หิวน้ำ", "diabetes", "hyperglycemia"]):
+        # Diabetes
+        if any(w in prompt_lower for w in ["เบาหวาน", "น้ำตาล", "diabetes", "hyperglycemia"]):
             return {
+                **base,
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับภาวะระดับน้ำตาลในเลือดสูง",
-                    "diagnosis": "ภาวะระดับน้ำตาลในเลือดสูงชั่วคราวในผู้ป่วยเบาหวาน (Uncontrolled Diabetes Mellitus with Hyperglycemia)",
-                    "key_instructions": [
-                        "รับประทานยาคุมระดับน้ำตาลอย่างเคร่งครัดตรงเวลาทุกมื้อ",
-                        "งดเครื่องดื่มชานม น้ำหวาน ผลไม้รสหวานจัด และขนมเบเกอรี่",
-                        "จิบน้ำสะอาดเรื่อยๆ อย่างน้อยวันละ 8 แก้ว"
-                    ],
-                    "red_flags": ["มีอาการหอบหายใจลึก ลมหายใจมีกลิ่นหวานคล้ายผลไม้ ซึม สับสน หรือหมดสติ"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกเบาหวาน"}
+                    "headline": "สรุปคำแนะนำสำหรับภาวะน้ำตาลในเลือดสูง",
+                    "diagnosis": "ภาวะระดับน้ำตาลในเลือดสูง (Uncontrolled Diabetes Mellitus)",
+                    "key_instructions": ["รับประทานยาคุมระดับน้ำตาลตามแพทย์สั่ง", "งดเครื่องดื่มรสหวาน", "จิบน้ำสะอาดอย่างน้อยวันละ 8 แก้ว"],
+                    "red_flags": ["หอบหายใจลึก ลมหายใจมีกลิ่นหวาน ซึมลง หรือหมดสติ ให้โทร 1669"],
+                    "follow_up": {"date": "กลับมาพบแพทย์ตามนัดเพื่อตรวจระดับน้ำตาล", "location": "", "reason": ""}
                 },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Metformin 1000 mg", "physical_description": "ยาเม็ดใหญ่สีขาว รูปไข่", "instructions": "1 เม็ด เช้า-เย็น หลังอาหารทันที"}
-                        ],
-                        "stop": [
-                            {"med_name": "Metformin 500 mg (ซองเดิม)", "physical_description": "ยาเม็ดเล็กสีขาว กลม", "discard_instruction": "หยิบทิ้งถังขยะทันที", "reason": "ปรับเพิ่มขนาดเป็นยาตัวใหม่แล้ว"}
-                        ],
-                        "change": [
-                            {"med_name": "Glipizide 5 mg", "physical_description": "ยาเม็ดสีขาวแบ่งครึ่ง", "change_summary": "ปรับเพิ่มเป็น 1 เม็ด ก่อนอาหารเช้า 30 นาที"}
-                        ]
-                    }
-                }
+                "medication_box": {"start": [], "stop": [], "change": []}
             }
 
-        # Pattern 7: Trauma / Wounds / Injuries (อุบัติเหตุ / แผล / เลือดออก / กระดูก)
-        if any(w in prompt_lower for w in ["อุบัติเหตุ", "แผล", "ล้ม", "ชน", "กระดูก", "ฟกช้ำ", "trauma", "wound"]):
+        # Trauma
+        if any(w in prompt_lower for w in ["อุบัติเหตุ", "แผล", "ล้ม", "ชน", "กระดูก", "trauma", "wound"]):
             return {
+                **base,
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับแผลอุบัติเหตุและการบาดเจ็บ",
-                    "diagnosis": "แผลฉีกขาดและบาดเจ็บจากการล้ม/อุบัติเหตุ (Laceration Wound with Soft Tissue Contusion)",
-                    "key_instructions": [
-                        "ระวังอย่าให้แผลโดนน้ำเป็นเวลา 7 วัน จนกว่าแผลจะแห้งสนิทหรือตัดไหม",
-                        "มาทำแผลที่สถานพยาบาลใกล้บ้านทุก 1-2 วันตามแพทย์สั่ง",
-                        "ทานยาปฏิชีวนะ (ยาฆ่าเชื้อ) ให้หมดครบตามจำนวนเม็ดที่จ่าย ห้ามหยุดยาเอง"
-                    ],
-                    "red_flags": ["บริเวณแผลมีอาการบวมแดงร้อน มีมูกหนองไหล ปวดแผลรุนแรงขึ้น หรือมีไข้สูง"],
-                    "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. เพื่อตัดไหมและตรวจแผล"}
+                    "headline": "สรุปคำแนะนำสำหรับแผลและการบาดเจ็บ",
+                    "diagnosis": "แผลฉีกขาดและการบาดเจ็บเนื้อเยื่ออ่อน (Laceration / Soft Tissue Injury)",
+                    "key_instructions": ["ดูแลแผลไม่ให้โดนน้ำ", "มาตรวจแผลตามนัด", "สังเกตอาการผิดปกติของแผลทุกวัน"],
+                    "red_flags": ["แผลบวมแดงร้อน มีหนองไหล ปวดรุนแรงขึ้น หรือมีไข้สูง"],
+                    "follow_up": {"date": "มาตรวจแผลตามนัดหมาย", "location": "", "reason": ""}
                 },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Dicloxacillin 250 mg", "physical_description": "แคปซูลสีฟ้า-ขาว", "instructions": "1 แคปซูล ก่อนอาหาร 4 มื้อ (เช้า เที่ยง เย็น ก่อนนอน)"},
-                            {"med_name": "Paracetamol 500 mg", "physical_description": "ยาเม็ดสีขาวกลม", "instructions": "1 เม็ด ทุก 6 ชั่วโมง เวลามีอาการปวดแผล"}
-                        ],
-                        "stop": [
-                            
-                        ],
-                        "change": []
-                    }
-                }
+                "medication_box": {"start": [], "stop": [], "change": []}
             }
 
-        # Pattern 8: Allergy / Anaphylaxis / Urticaria (แพ้ยา / แพ้อาหาร / ผื่นคัน)
-        if any(w in prompt_lower for w in ["แพ้", "ผื่น", "คัน", "บวม", "แพ้อาหาร", "แพ้อย่างรุนแรง", "allergy", "urticaria"]):
+        # Allergy
+        if any(w in prompt_lower for w in ["แพ้", "ผื่น", "คัน", "บวม", "allergy", "urticaria"]):
             return {
+                **base,
                 "patient_view": {
-                    "headline": "สรุปคำแนะนำการดูแลตนเองสำหรับอาการแพ้และผื่นคันเฉียบพลัน",
-                    "diagnosis": "ภาวะผื่นคันภูมิแพ้เฉียบพลัน / สงสัยอาการแพ้ยาหรืออาหาร (Acute Urticaria / Allergic Reaction)",
-                    "key_instructions": [
-                        "หยุดรับประทานยาหรืออาหารที่สงสัยว่าเป็นสาเหตุของการแพ้ทันที",
-                        "รับประทานยาแก้แพ้ (Cetirizine) วันละ 1 เม็ดก่อนนอน เพื่อลดอาการคันและผื่นบวม",
-                        "หลีกเลี่ยงการเกาบริเวณผื่นคันเพื่อป้องกันแผลติดเชื้อแบคทีเรียแทรกซ้อน"
-                    ],
-                    "red_flags": ["มีอาการแน่นหน้าอก หายใจเสียงหวีด ตาบวม ปากบวม หรือกลืนอาหารลำบาก (รีบมาห้องฉุกเฉินทันที)"],
-                    "follow_up": {"follow_up_date_thai": "ตามนัดหมายแพทย์ (หากผื่นไม่ลดลงใน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"}
+                    "headline": "สรุปคำแนะนำสำหรับอาการแพ้",
+                    "diagnosis": "ภาวะผื่นคันภูมิแพ้เฉียบพลัน (Acute Urticaria / Allergic Reaction)",
+                    "key_instructions": ["หยุดรับประทานยาหรืออาหารที่สงสัยว่าเป็นสาเหตุ", "หลีกเลี่ยงการเกา", "หลีกเลี่ยงสารก่อภูมิแพ้"],
+                    "red_flags": ["มีอาการแน่นหน้าอก หายใจมีเสียงหวีด ปากบวม ตาบวม หรือกลืนลำบาก"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากผื่นไม่ลดลงใน 3 วัน", "location": "", "reason": ""}
                 },
-                "caregiver_matrix": {
-                    "medication_reconciliation": {
-                        "start": [
-                            {"med_name": "Cetirizine 10 mg", "physical_description": "ยาเม็ดเล็กสีขาว", "instructions": "1 เม็ด ก่อนนอน เพื่อลดอาการคันและผื่น"}
-                        ],
-                        "stop": [
-                            {"med_name": "ยาอาหารสงสัยแพ้ตัวใหม่", "physical_description": "ตัวยาใหม่ที่เพิ่งเริ่มทาน", "discard_instruction": "หยุดรับประทานทันที", "reason": "สงสัยเป็นสาเหตุของการเกิดผื่นแพ้"}
-                        ],
-                        "change": []
-                    }
-                }
+                "medication_box": {"start": [], "stop": [], "change": []}
             }
 
-        # Pattern 9: Default Fallback (ภาวะฉุกเฉินทั่วไป / General Emergency Discharge)
+
+        # Head Injury (common in motorcycle accidents)
+        if any(w in prompt_lower for w in ["หัว", "ศีรษะ", "head injury", "concussion"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับผู้บาดเจ็บที่ศีรษะ",
+                    "diagnosis": "การบาดเจ็บที่ศีรษะ (Head Injury / Concussion — observe at home)",
+                    "key_instructions": [
+                        "ให้ผู้ป่วยนอนพัก โดยมีผู้ดูแลเฝ้าสังเกตอาการตลอด 24 ชั่วโมง",
+                        "ปลุกทุก 2-3 ชั่วโมงเพื่อเช็คว่ารู้สึกตัวดี พูดคุยรู้เรื่องหรือไม่",
+                        "ห้ามขับขี่ยานพาหนะหรือทำงานกับเครื่องจักรอย่างน้อย 48 ชั่วโมง",
+                        "งดแอลกอฮอล์และยาที่มีฤทธิ์กดประสาททุกชนิด"
+                    ],
+                    "red_flags": ["ปวดศีรษะรุนแรงขึ้นเรื่อย ๆ", "อาเจียนพุ่งหรืออาเจียนหลายครั้ง",
+                        "ซึมลง ปลุกไม่ตื่น พูดไม่รู้เรื่อง แขนขาอ่อนแรงครึ่งซีก",
+                        "มีน้ำใสหรือเลือดไหลออกจากหูหรือจมูก",
+                        "ตามัว เห็นภาพซ้อน หรือ pupil สองข้างไม่เท่ากัน"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากมีอาการผิดปกติตาม red flags ข้างต้น", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # UTI / Urinary tract infection
+        if any(w in prompt_lower for w in ["ปัสสาวะ", "แสบขัด", "uti", "urinary", "ปวดเบ่ง"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับผู้ป่วยติดเชื้อทางเดินปัสสาวะ",
+                    "diagnosis": "การติดเชื้อทางเดินปัสสาวะ (Urinary Tract Infection / UTI)",
+                    "key_instructions": [
+                        "ดื่มน้ำสะอาดมาก ๆ อย่างน้อยวันละ 2-3 ลิตร",
+                        "รับประทานยาฆ่าเชื้อจนหมดตามแพทย์สั่ง ห้ามหยุดยาเอง",
+                        "ไม่กลั้นปัสสาวะ ควรเข้าห้องน้ำทันทีที่ปวด",
+                        "ทำความสะอาดจากด้านหน้าไปด้านหลังทุกครั้ง"
+                    ],
+                    "red_flags": ["มีไข้สูงหนาวสั่น (อาจลามเป็นกรวยไตอักเสบ)",
+                        "ปวดหลังหรือสีข้างรุนแรง",
+                        "คลื่นไส้อาเจียนมากจนรับประทานยาไม่ได้",
+                        "ปัสสาวะเป็นเลือดหรือมีหนองมากขึ้น"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้นใน 2-3 วัน", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Cellulitis / Skin infection
+        if any(w in prompt_lower for w in ["บวม", "แดง", "ร้อน", "cellulitis", "ฝี", "หนอง", "infection"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับผู้ป่วยที่มีการอักเสบของผิวหนัง",
+                    "diagnosis": "ผิวหนังอักเสบติดเชื้อ (Cellulitis / Skin Abscess)",
+                    "key_instructions": [
+                        "ประคบด้วยน้ำอุ่นสะอาดบริเวณที่บวมแดง วันละ 3-4 ครั้ง",
+                        "ยกส่วนที่บวมให้สูงกว่าระดับหัวใจเพื่อลดอาการบวม",
+                        "รับประทานยาฆ่าเชื้อจนหมดตามแพทย์สั่ง ห้ามหยุดก่อน",
+                        "รักษาความสะอาดบริเวณแผล หลีกเลี่ยงการแกะเกา"
+                    ],
+                    "red_flags": ["บริเวณบวมแดงขยายวงกว้างขึ้นอย่างรวดเร็ว หรือลามเป็นเส้นสีแดง",
+                        "มีไข้สูงหนาวสั่น",
+                        "ปวดรุนแรงมากขึ้นหรือมีหนองไหลมากขึ้น",
+                        "มีอาการของภาวะติดเชื้อในกระแสเลือด: ไข้สูง สับสน ความดันต่ำ"],
+                    "follow_up": {"date": "กลับมาตรวจดูแผลตามนัด หรือมาทันทีหากอาการแย่ลง", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Animal bite / Rabies PEP
+        if any(w in prompt_lower for w in ["หมากัด", "แมวกัด", "สุนัข", "rabies", "สัตว์กัด", "bite"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับผู้ถูกสัตว์กัด",
+                    "diagnosis": "แผลถูกสัตว์กัด (Animal Bite — Rabies Observation Protocol)",
+                    "key_instructions": [
+                        "ล้างแผลด้วยสบู่และน้ำสะอาดอย่างน้อย 15 นาทีทันที",
+                        "ไปรับวัคซีนป้องกันพิษสุนัขบ้าทุกครั้งตามนัด ห้ามขาด",
+                        "หากสัตว์มีเจ้าของ ให้กักขังสังเกตอาการสัตว์ 10 วัน",
+                        "หากสัตว์เป็นสัตว์จรจัดหรือตายภายใน 10 วัน ให้รีบพบแพทย์เพื่อรับ Rabies Immunoglobulin"
+                    ],
+                    "red_flags": ["มีอาการทางระบบประสาท เช่น กลืนลำบาก กลัวน้ำ สับสน",
+                        "แผลมีอาการบวมแดงร้อน มีหนอง หรือมีไข้",
+                        "หากสัตว์ที่กัดตายภายใน 10 วัน ให้รีบมาพบแพทย์ทันที"],
+                    "follow_up": {"date": "มาตรวจแผลและรับวัคซีนตามนัดทุกครั้ง", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
+        # Back pain / Musculoskeletal
+        if any(w in prompt_lower for w in ["ปวดหลัง", "back pain", "ปวดกล้ามเนื้อ", "เคล็ด", "แพลง", "sciatica"]):
+            return {
+                **base,
+                "patient_view": {
+                    "headline": "สรุปคำแนะนำสำหรับอาการปวดหลังหรือกล้ามเนื้อ",
+                    "diagnosis": "อาการปวดหลังหรือกล้ามเนื้อและเส้นเอ็นอักเสบ (Back Pain / Musculoskeletal Strain)",
+                    "key_instructions": [
+                        "ประคบเย็นในช่วง 48 ชั่วโมงแรก แล้วจึงเปลี่ยนเป็นประคบร้อน",
+                        "หลีกเลี่ยงการยกของหนักหรือก้มเงยเป็นเวลา 1-2 สัปดาห์",
+                        "บริหารร่างกายเบา ๆ ด้วยท่าที่ไม่ทำให้ปวดเพิ่มขึ้น",
+                        "หากนั่งทำงานนาน ควรลุกเดินยืดเส้นทุก 1 ชั่วโมง"
+                    ],
+                    "red_flags": ["ปวดร้าวลงขาทั้งสองข้าง", "มีอาการชาหรืออ่อนแรงของขาทั้งสองข้าง",
+                        "กลั้นปัสสาวะหรืออุจจาระไม่ได้", "ปวดรุนแรงมากขึ้นจนเดินไม่ได้",
+                        "มีไข้ร่วมด้วยหรือประวัติอุบัติเหตุรุนแรง"],
+                    "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้นใน 1 สัปดาห์", "location": "", "reason": ""}
+                },
+                "medication_box": {"start": [], "stop": [], "change": []}
+            }
+
         return {
+            **base,
             "patient_view": {
-                "headline": "สรุปคำแนะนำการดูแลตนเองหลังออกจากห้องฉุกเฉิน",
-                "diagnosis": "ภาวะความดันโลหิตสูงและระดับน้ำตาลในเลือดสูงชั่วคราว (Hypertensive Urgency with Hyperglycemia)",
+                "headline": "สรุปคำแนะนำหลังออกจากห้องฉุกเฉิน",
+                "diagnosis": "อาการทั่วไปที่พบในห้องฉุกเฉิน (General ED Discharge)",
                 "key_instructions": [
-                    "รับประทานยาปรับระดับน้ำตาลและยาลดความดันตามคำสั่งแพทย์อย่างเคร่งครัด",
-                    "ทิ้งยาเม็ดสีขาวตัวเดิมซองเก่าทันที ไม่นำกลับมารับประทานซ้ำ",
-                    "จิบน้ำสะอาดเรื่อยๆ อย่างน้อยวันละ 8 แก้ว และพักผ่อนให้เพียงพอ",
-                    "งดอาหารรสเค็มจัด อาหารมัน และของหวานทุกชนิด"
+                    "สังเกตอาการตนเองอย่างใกล้ชิด หากอาการแย่ลง ให้กลับมาพบแพทย์ทันที",
+                    "พักผ่อนให้เพียงพอและดื่มน้ำสะอาดอย่างน้อยวันละ 8 แก้ว",
+                    "รับประทานอาหารอ่อนย่อยง่าย หลีกเลี่ยงอาหารรสจัดและเครื่องดื่มแอลกอฮอล์"
                 ],
-                "red_flags": ["มีอาการปวดศีรษะรุนแรง ตาพร่ามัว เจ็บแน่นหน้าอก หรือซึมลง ให้กลับมาห้องฉุกเฉินทันที"],
-                "follow_up": {"follow_up_date_thai": "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 09:00 น. คลินิกอายุรกรรม"}
+                "red_flags": ["มีอาการผิดปกติรุนแรงขึ้น เช่น เจ็บแน่นหน้าอก หายใจลำบาก ซึมลง หรือหมดสติ"],
+                "follow_up": {"date": "กลับมาพบแพทย์หากอาการไม่ดีขึ้น", "location": "", "reason": ""}
             },
-            "caregiver_matrix": {
-                "medication_reconciliation": {
-                    "start": [{"med_name": "Metformin 1000 mg", "physical_description": "ยาเม็ดใหญ่สีขาว รูปไข่", "instructions": "1 เม็ด เช้า-เย็น หลังอาหารทันที"}],
-                    "stop": [{"med_name": "Metformin 500 mg (ซองเดิม)", "physical_description": "ยาเม็ดเล็กสีขาว กลม", "discard_instruction": "หยิบทิ้งถังขยะทันที", "reason": "ปรับเพิ่มขนาดเป็นยาตัวใหม่แล้ว"}],
-                    "change": [{"med_name": "Amlodipine 5 mg", "physical_description": "ยาลดความดัน เม็ดสีเหลืองกลม", "change_summary": "ปรับลดจาก 2 เม็ด เหลือ 1 เม็ดก่อนนอน"}]
-                }
-            }
+            "medication_box": {"start": [], "stop": [], "change": []}
         }
+
+
 
 
 def get_llm_adapter() -> BaseLLMAdapter:

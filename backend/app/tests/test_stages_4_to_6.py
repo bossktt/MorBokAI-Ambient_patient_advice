@@ -124,15 +124,15 @@ class TestStages4To6(unittest.TestCase):
         from app.services.llm_adapter import GeminiAdapter
 
         test_cases = [
-            ("แน่นหน้าอก หัวใจ", "unstable angina"),
+            ("แน่นหน้าอก หัวใจ", "Chest Pain"),
             ("ปวดท้อง อาเจียน ถ่ายเหลว", "Acute Gastroenteritis"),
             ("เวียนหัว ความดันสูง ปวดศีรษะ", "Vertigo"),
-            ("หอบเหนื่อย หายใจไม่สะดวก หอบหืด", "Acute Asthma Exacerbation"),
+            ("หอบเหนื่อย หายใจไม่สะดวก หอบหืด", "Asthma"),
             ("มีไข้สูง เจ็บคอ หนาวสั่น", "Common Cold"),
             ("ใจสั่น หัวใจเต้นเร็ว", "Palpitations"),
-            ("อุบัติเหตุ มีแผล เลือดออก", "Laceration Wound"),
+            ("อุบัติเหตุ มีแผล เลือดออก", "Laceration"),
             ("ผื่นคัน แพ้ยา แพ้อาหาร", "Acute Urticaria"),
-            ("อาการทั่วไปอื่นๆ", "Hypertensive Urgency with Hyperglycemia") # Default fallback
+            ("อาการทั่วไปอื่นๆ", "General ED Discharge")
         ]
 
         for prompt, expected_keyword in test_cases:

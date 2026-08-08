@@ -186,12 +186,153 @@ export default function PDFDownloadPage({ params }: { params: Promise<{ id: stri
 
         </div>
 
+        {/* Doctor Quick Evaluation Card (Step 3: Questionnaire after Screen 5) */}
+        <DoctorQuickFeedbackCard encounterId={encounterId} doctorLicense={doctorInfo?.license_no} />
+
       </main>
 
       {/* Footer */}
       <footer className="w-full py-4 text-center text-xs text-slate-500 border-t border-[#c3c6d1] bg-white">
         MorBok Ambient Care Assistant • Step 5 PDF Delivery
       </footer>
+    </div>
+  );
+}
+
+function DoctorQuickFeedbackCard({ encounterId, doctorLicense }: { encounterId: string; doctorLicense?: string }) {
+  const [csat, setCsat] = useState(5);
+  const [workloadReduction, setWorkloadReduction] = useState(5);
+  const [clinicalAccuracy, setClinicalAccuracy] = useState(5);
+  const [nps, setNps] = useState(10);
+  const [comments, setComments] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const payload = {
+      role: 'DOCTOR',
+      encounter_id: encounterId,
+      doctor_license: doctorLicense || 'N/A',
+      overall_satisfaction_csat: Number(csat),
+      workload_reduction_satisfaction: Number(workloadReduction),
+      clinical_accuracy_rating: Number(clinicalAccuracy),
+      doctor_nps_score: Number(nps),
+      comments: comments
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/telemetry/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        setSubmitted(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="w-full bg-[#f0fdf4] border border-[#bbf7d0] rounded-2xl p-4 text-center mt-4 space-y-1">
+        <div className="text-emerald-700 font-bold text-sm">✅ บันทึกแบบประเมินความพึงพอใจแพทย์เรียบร้อยแล้ว</div>
+        <p className="text-xs text-slate-500">ขอบคุณสำหรับข้อเสนอแนะในการพัฒนา MorBok AI</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full bg-white border border-[#c3c6d1] rounded-2xl p-5 mt-4 space-y-3 shadow-sm text-left">
+      <div className="flex items-center gap-2 text-[#003366] font-extrabold text-sm border-b border-slate-100 pb-2">
+        <span className="material-symbols-outlined text-lg text-amber-500">star</span>
+        <span>แบบประเมินความพึงพอใจแพทย์ (Doctor Feedback Questionnaire)</span>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+        <div>
+          <label className="font-bold text-slate-700 block mb-1">1. ความพึงพอใจภาพรวมในการใช้งานเคสนี้ (CSAT):</label>
+          <select
+            value={csat}
+            onChange={(e) => setCsat(Number(e.target.value))}
+            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-800"
+          >
+            <option value={5}>⭐️⭐️⭐️⭐️⭐️ (5 - พึงพอใจมากที่สุด)</option>
+            <option value={4}>⭐️⭐️⭐️⭐️ (4 - พึงพอใจมาก)</option>
+            <option value={3}>⭐️⭐️⭐️ (3 - ปานกลาง)</option>
+            <option value={2}>⭐️⭐️ (2 - ควรปรับปรุง)</option>
+            <option value={1}>⭐️ (1 - ไม่พึงพอใจ)</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="font-bold text-slate-700 block mb-1">2. การลดภาระคีย์ข้อมูล:</label>
+            <select
+              value={workloadReduction}
+              onChange={(e) => setWorkloadReduction(Number(e.target.value))}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-800"
+            >
+              <option value={5}>5 - ช่วยประหยัดเวลามาก</option>
+              <option value={4}>4 - ช่วยได้พอสมควร</option>
+              <option value={3}>3 - ปานกลาง</option>
+              <option value={2}>2 - ช่วยได้น้อย</option>
+              <option value={1}>1 - ไม่ช่วย</option>
+            </select>
+          </div>
+          <div>
+            <label className="font-bold text-slate-700 block mb-1">3. ความถูกต้องทางการแพทย์:</label>
+            <select
+              value={clinicalAccuracy}
+              onChange={(e) => setClinicalAccuracy(Number(e.target.value))}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-slate-800"
+            >
+              <option value={5}>5 - ถูกต้องแม่นยำมาก</option>
+              <option value={4}>4 - ดีเยี่ยม</option>
+              <option value={3}>3 - ปานกลาง</option>
+              <option value={2}>2 - มีข้อผิดพลาดเล็กน้อย</option>
+              <option value={1}>1 - ไม่แม่นยำ</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="font-bold text-slate-700 block mb-1">4. โอกาสแนะนำให้เพื่อนแพทย์ใช้งาน (NPS 0-10):</label>
+          <input
+            type="number"
+            min="0"
+            max="10"
+            value={nps}
+            onChange={(e) => setNps(Number(e.target.value))}
+            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-slate-800"
+          />
+        </div>
+
+        <div>
+          <label className="font-bold text-slate-700 block mb-1">ข้อเสนอแนะเพิ่มเติม:</label>
+          <input
+            type="text"
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+            placeholder="เช่น คำถอดความแม่นยำดี, อยากให้ออกแบบตารางยาสั้นลง..."
+            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-slate-800"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full py-2 bg-[#003366] hover:bg-[#002244] text-white font-bold rounded-lg transition text-xs shadow-xs"
+        >
+          {submitting ? 'กำลังส่ง...' : 'ส่งแบบประเมินแพทย์'}
+        </button>
+      </form>
     </div>
   );
 }

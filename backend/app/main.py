@@ -40,6 +40,7 @@ from app.services.deid_engine import DeIdentificationEngine
 from app.services.llm_adapter import get_llm_adapter
 from app.services.asr_service import MultiTierASRService
 from app.services.pdf_service import PDFService
+from app.services.telemetry_service import TelemetryService, TELEMETRY_LOG_PATH
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -240,7 +241,7 @@ def process_transcript(payload: dict):
     rehydrated = DeIdentificationEngine.rehydrate_summary(raw_summary, meta)
 
     patient_view = rehydrated.get("patient_view", {})
-    caregiver_matrix = rehydrated.get("caregiver_matrix", {}).get("medication_reconciliation", {})
+    medication_box = rehydrated.get("medication_box", {})
 
     raw_diag = (patient_view.get("diagnosis") or "").strip()
     invalid_keywords = ["ไม่ระบุ", "ไม่มี", "ไม่พบข้อมูล", "ไม่พบคำวินิจฉัย", "ไม่พบข้อวินิจฉัย", "ไม่ระบุข้อวินิจฉัย", "ไม่พบการวินิจฉัย", "no diagnosis", "not specified"]
@@ -253,30 +254,30 @@ def process_transcript(payload: dict):
     ]
 
     start_meds = []
-    for m in caregiver_matrix.get("start", []):
+    for m in medication_box.get("start", []):
         start_meds.append({
-            "name": m.get("med_name", "ยาใหม่"),
-            "desc": m.get("physical_description", "ลักษณะยา"),
-            "usage": f"{m.get('dosage', '')} {m.get('timing', '')} {m.get('instructions', '')}".strip()
+            "name": m.get("name", "ยาใหม่"),
+            "desc": m.get("appearance", "ลักษณะยา"),
+            "usage": m.get("how_to_take", "")
         })
 
     stop_meds = []
-    for m in caregiver_matrix.get("stop", []):
+    for m in medication_box.get("stop", []):
         stop_meds.append({
-            "name": m.get("med_name", "ยาที่ต้องหยุด"),
-            "desc": m.get("physical_description", "ซองเดิม"),
-            "warning": f"⚠️ {m.get('discard_instruction', 'หยุดรับประทานทันที')} ({m.get('reason', '')})"
+            "name": m.get("name", "ยาที่ต้องหยุด"),
+            "desc": m.get("appearance", "ซองเดิม"),
+            "warning": f"⚠️ {m.get('action', 'หยุดรับประทานทันที')} ({m.get('reason', '')})"
         })
 
     change_meds = []
-    for m in caregiver_matrix.get("change", []):
+    for m in medication_box.get("change", []):
         change_meds.append({
-            "name": m.get("med_name", "ยาที่ปรับขนาด"),
-            "desc": m.get("physical_description", "ลักษณะยา"),
-            "change": m.get("change_summary") or f"{m.get('new_dosage', '')} {m.get('timing', '')}"
+            "name": m.get("name", "ยาที่ปรับขนาด"),
+            "desc": m.get("appearance", "ลักษณะยา"),
+            "change": m.get("new_instruction", "")
         })
 
-    follow_up = patient_view.get("follow_up", {}).get("follow_up_date_thai") or "ตามนัดหมายแพทย์ (หากมีอาการไข้สูงเกิน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"
+    follow_up = patient_view.get("follow_up", {}).get("date") or patient_view.get("follow_up", {}).get("follow_up_date_thai") or "ตามนัดหมายแพทย์ (หากมีอาการไข้สูงเกิน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"
 
     response_payload = {
         "status": "SUCCESS",
@@ -315,6 +316,37 @@ def export_encounter_logs():
         path=LOG_FILE_PATH,
         media_type="application/x-ndjson",
         filename=f"encounter_logs_{int(time.time())}.jsonl"
+    )
+
+# -----------------------------------------------------------------------------
+# Telemetry & User Satisfaction (CSAT/NPS/SUS) Evaluation Endpoints
+# -----------------------------------------------------------------------------
+
+@app.post(f"{settings.API_PREFIX}/telemetry/record")
+def record_telemetry_evaluation(payload: dict):
+    """
+    Records a Doctor or Patient/Caregiver evaluation survey response,
+    including CSAT %, NPS, SUS scores, and qualitative feedback.
+    """
+    record = TelemetryService.record_evaluation(payload)
+    return {"status": "SUCCESS", "record_id": record["id"], "timestamp": record["timestamp"]}
+
+@app.get(f"{settings.API_PREFIX}/telemetry/summary")
+def get_telemetry_satisfaction_summary():
+    """
+    Returns aggregated Doctor & Patient satisfaction metrics (CSAT %, NPS, avg ratings).
+    """
+    return TelemetryService.calculate_satisfaction_summary()
+
+@app.get(f"{settings.API_PREFIX}/telemetry/export")
+def export_telemetry_evaluations():
+    """Download raw JSONL telemetry dataset containing Doctor & Patient satisfaction metrics."""
+    if not os.path.exists(TELEMETRY_LOG_PATH):
+        raise HTTPException(status_code=404, detail="No telemetry evaluation logs found yet.")
+    return FileResponse(
+        path=TELEMETRY_LOG_PATH,
+        media_type="application/x-ndjson",
+        filename=f"telemetry_evaluations_{int(time.time())}.jsonl"
     )
 
 @app.get(f"{settings.API_PREFIX}/encounters/{{encounter_id}}")

@@ -2,8 +2,8 @@
 """
 MorBok AI — Clinical Telemetry & User Evaluation Service
 =========================================================
-This service collects, validates, and persists user feedback and telemetry metrics
-for testing MorBok AI with Doctors (Clinicians) and Patients/Caregivers.
+This service collects, validates, and persists user feedback, telemetry metrics,
+and Satisfaction (CSAT/NPS) scores for Doctors (Clinicians) and Patients/Caregivers.
 """
 
 import os
@@ -31,24 +31,33 @@ class TelemetryService:
             "manual_edit_count": 2,
             "sus_scores": [4, 5, 4, 5, 4, 5, 5, 4, 5, 5],
             "sus_total": 92.5,
+            "overall_satisfaction_csat": 5,      # 1-5 Likert
+            "workload_reduction_satisfaction": 5, # 1-5 Likert
+            "perceived_patient_impact": 5,       # 1-5 Likert
+            "doctor_nps_score": 9,               # 0-10 Score
             "clinical_accuracy_rating": 5,
             "grade5_language_rating": 5,
             "linked_audio_utility_rating": 4,
             "comments": "ช่วยลดเวลาเขียนใบนัดได้ดีมาก"
           }
 
-        - Patient evaluation:
+        - Patient / Caregiver evaluation:
           {
             "role": "PATIENT",
             "encounter_id": "ENC_XXXXX",
             "channel": "LINE_OA",
-            "red_flag_recall_score": 100,  # %
-            "med_instruction_recall_score": 100,  # %
+            "overall_satisfaction_csat": 5,          # 1-5 Likert
+            "language_clarity_satisfaction": 5,      # 1-5 Likert (Grade 5 Thai)
+            "med_matrix_clarity_satisfaction": 5,    # 1-5 Likert (START/STOP/CHANGE)
+            "line_audio_convenience_satisfaction": 5,# 1-5 Likert
+            "reassurance_peace_of_mind": 5,          # 1-5 Likert
+            "patient_nps_score": 10,                 # 0-10 Score
+            "red_flag_recall_score": 100,            # %
+            "med_instruction_recall_score": 100,      # %
             "reading_ease_rating": 5,
             "ambient_mic_comfort_rating": 4,
             "trust_in_ai_rating": 5,
             "audio_playback_used": True,
-            "nps_score": 10,
             "comments": "สรุปชัดเจน เข้าใจง่าย มีเสียงให้ฟังย้อนหลัง"
           }
         """
@@ -86,3 +95,57 @@ class TelemetryService:
             print(f"⚠️ Error reading telemetry records: {e}")
         
         return records
+
+    @staticmethod
+    def calculate_satisfaction_summary() -> Dict[str, Any]:
+        """Calculates CSAT %, NPS, and average Likert scores for Doctors and Patients."""
+        records = TelemetryService.get_all_records()
+        
+        doctor_csat_scores = []
+        doctor_nps_scores = []
+        patient_csat_scores = []
+        patient_nps_scores = []
+
+        for r in records:
+            p = r.get("payload", {})
+            role = r.get("role") or p.get("role")
+            
+            if role == "DOCTOR":
+                if "overall_satisfaction_csat" in p:
+                    doctor_csat_scores.append(float(p["overall_satisfaction_csat"]))
+                if "doctor_nps_score" in p:
+                    doctor_nps_scores.append(int(p["doctor_nps_score"]))
+            elif role in ["PATIENT", "CAREGIVER"]:
+                if "overall_satisfaction_csat" in p:
+                    patient_csat_scores.append(float(p["overall_satisfaction_csat"]))
+                if "patient_nps_score" in p:
+                    patient_nps_scores.append(int(p["patient_nps_score"]))
+
+        def calc_csat_pct(scores: List[float]) -> float:
+            if not scores:
+                return 0.0
+            satisfied = sum(1 for s in scores if s >= 4.0)
+            return round((satisfied / len(scores)) * 100, 1)
+
+        def calc_nps(scores: List[int]) -> float:
+            if not scores:
+                return 0.0
+            promoters = sum(1 for s in scores if s >= 9)
+            detractors = sum(1 for s in scores if s <= 6)
+            return round(((promoters - detractors) / len(scores)) * 100, 1)
+
+        return {
+            "total_evaluations": len(records),
+            "doctor": {
+                "count": len(doctor_csat_scores),
+                "csat_percentage": calc_csat_pct(doctor_csat_scores),
+                "avg_satisfaction_rating": round(sum(doctor_csat_scores) / len(doctor_csat_scores), 2) if doctor_csat_scores else 0.0,
+                "nps": calc_nps(doctor_nps_scores)
+            },
+            "patient_caregiver": {
+                "count": len(patient_csat_scores),
+                "csat_percentage": calc_csat_pct(patient_csat_scores),
+                "avg_satisfaction_rating": round(sum(patient_csat_scores) / len(patient_csat_scores), 2) if patient_csat_scores else 0.0,
+                "nps": calc_nps(patient_nps_scores)
+            }
+        }
