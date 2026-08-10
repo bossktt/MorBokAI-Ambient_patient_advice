@@ -208,6 +208,24 @@ function DoctorQuickFeedbackCard({ encounterId, doctorLicense }: { encounterId: 
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Background telemetry: auto-read from localStorage (set by Screen 4)
+  const [timeToSignOff, setTimeToSignOff] = useState<number | null>(null);
+  const [editCount, setEditCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loadedAt = localStorage.getItem(`morbok_telemetry_${encounterId}_screen4_loaded_at`);
+      if (loadedAt) {
+        const elapsed = Math.round((Date.now() - parseInt(loadedAt, 10)) / 1000);
+        setTimeToSignOff(elapsed > 0 ? elapsed : null);
+      }
+      const edits = localStorage.getItem(`morbok_telemetry_${encounterId}_edit_count`);
+      if (edits) {
+        setEditCount(parseInt(edits, 10) || 0);
+      }
+    }
+  }, [encounterId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -220,6 +238,8 @@ function DoctorQuickFeedbackCard({ encounterId, doctorLicense }: { encounterId: 
       workload_reduction_satisfaction: Number(workloadReduction),
       clinical_accuracy_rating: Number(clinicalAccuracy),
       doctor_nps_score: Number(nps),
+      time_to_sign_off_sec: timeToSignOff,
+      manual_edit_count: editCount,
       comments: comments
     };
 

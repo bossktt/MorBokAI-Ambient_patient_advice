@@ -240,6 +240,16 @@ class LineOAService:
                             "label": "📄 ดาวน์โหลดใบนัด & PDF ฉบับเต็ม",
                             "uri": f"https://liff.line.me/{settings.LINE_LIFF_ID or '1234567890-demo'}/pdf"
                         }
+                    },
+                    {
+                        "type": "button",
+                        "style": "secondary",
+                        "color": "#10B981",
+                        "action": {
+                            "type": "uri",
+                            "label": "📝 ให้คะแนนและประเมินความพึงพอใจ",
+                            "uri": f"{getattr(settings, 'PUBLIC_FRONTEND_URL', 'http://localhost:3000')}/patient/survey?encounter_id={summary_data.get('encounter_id', '')}"
+                        }
                     }
                 ]
             }

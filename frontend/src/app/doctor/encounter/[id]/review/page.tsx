@@ -55,6 +55,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   // Read recorded transcript & Doctor Info, then process through Clinical LLM Adapter
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Telemetry: Record Screen 4 load timestamp for time-to-sign-off calculation
+      localStorage.setItem(`morbok_telemetry_${encounterId}_screen4_loaded_at`, String(Date.now()));
+      localStorage.setItem(`morbok_telemetry_${encounterId}_edit_count`, '0');
+
       let docInfoObj = { first_name: 'วินัย', surname: 'ให้คำแนะนำ', license_no: 'ว.12345' };
       const savedDoc = localStorage.getItem('morbok_doctor_info');
       if (savedDoc) {
@@ -99,6 +103,9 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
               if (data.stopMeds) setStopMeds(data.stopMeds);
               if (data.changeMeds) setChangeMeds(data.changeMeds);
               if (data.followUpDate) setFollowUpDate(data.followUpDate);
+
+              // Telemetry: Store original AI draft for edit diff tracking
+              localStorage.setItem(`morbok_telemetry_${encounterId}_original_draft`, JSON.stringify(data));
             }
           })
           .catch((err) => {
@@ -141,6 +148,14 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
     setChangeMeds((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Telemetry: Increment edit counter whenever doctor modifies a field
+  const incrementEditCount = () => {
+    if (typeof window !== 'undefined') {
+      const current = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_edit_count`) || '0', 10);
+      localStorage.setItem(`morbok_telemetry_${encounterId}_edit_count`, String(current + 1));
+    }
+  };
+
   // Export note to PDF & proceed to Screen 5
   const handleExportPDF = async () => {
     if (!diagnosis || !diagnosis.trim()) {
@@ -179,6 +194,11 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       });
       const data = await res.json();
       const pdfId = data.pdf_id || `PDF_${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Telemetry: Save edit count and final draft for Screen 5 analysis
+      const editCount = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_edit_count`) || '0', 10);
+      localStorage.setItem(`morbok_telemetry_${encounterId}_edit_count`, String(editCount));
+      localStorage.setItem(`morbok_telemetry_${encounterId}_final_draft`, JSON.stringify(summaryData));
 
       router.push(`/doctor/encounter/${encounterId}/pdf?pdf_id=${pdfId}`);
     } catch (e) {
@@ -277,6 +297,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
               value={diagnosis}
               onChange={(e) => {
                 setDiagnosis(e.target.value);
+                incrementEditCount();
                 if (e.target.value.trim()) {
                   setDiagnosisError(false);
                   setErrorMsg('');
@@ -491,7 +512,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             <input
               type="text"
               value={followUpDate}
-              onChange={(e) => setFollowUpDate(e.target.value)}
+              onChange={(e) => {
+                setFollowUpDate(e.target.value);
+                incrementEditCount();
+              }}
               className="w-full bg-[#F0F3FF] border border-[#C3C6D1] rounded-xl px-3 py-2 text-xs text-[#111C2C] focus:ring-1 focus:ring-[#006D33] font-bold"
             />
           </div>

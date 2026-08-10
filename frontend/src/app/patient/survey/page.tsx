@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 
 export default function PatientSurveyPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const encounterId = searchParams.get('encounter_id') || 'N/A';
 
   // Form State
   const [csat, setCsat] = useState(5);
@@ -17,6 +20,8 @@ export default function PatientSurveyPage() {
   const [medRecall, setMedRecall] = useState(100);
   const [npsScore, setNpsScore] = useState(10);
   const [comments, setComments] = useState('');
+  const [ambientComfort, setAmbientComfort] = useState(5);
+  const [trustRating, setTrustRating] = useState(5);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,12 +29,15 @@ export default function PatientSurveyPage() {
 
     const payload = {
       role: 'PATIENT',
+      encounter_id: encounterId,
       channel: 'LINE_OA',
       overall_satisfaction_csat: Number(csat),
       language_clarity_satisfaction: Number(languageClarity),
       med_matrix_clarity_satisfaction: Number(medMatrixClarity),
       line_audio_convenience_satisfaction: Number(lineAudioConvenience),
       reassurance_peace_of_mind: Number(reassurance),
+      ambient_mic_comfort_rating: Number(ambientComfort),
+      trust_in_ai_rating: Number(trustRating),
       patient_nps_score: Number(npsScore),
       red_flag_recall_score: Number(redFlagRecall),
       med_instruction_recall_score: Number(medRecall),
@@ -37,7 +45,7 @@ export default function PatientSurveyPage() {
     };
 
     try {
-      const res = await fetch('/api/v1/telemetry/record', {
+      const res = await fetch(`${API_BASE}/api/v1/telemetry/record`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -146,9 +154,41 @@ export default function PatientSurveyPage() {
               </select>
             </div>
 
+            {/* Ambient Mic Comfort */}
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-200">5. ความสบายใจเรื่องไมโครโฟนอัดเสียงขณะตรวจ:</label>
+              <select
+                value={ambientComfort}
+                onChange={(e) => setAmbientComfort(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white"
+              >
+                <option value={5}>5 - สบายใจมาก ไม่กังวลเลย</option>
+                <option value={4}>4 - สบายใจ</option>
+                <option value={3}>3 - ปานกลาง</option>
+                <option value={2}>2 - ค่อนข้างกังวล</option>
+                <option value={1}>1 - กังวลมาก ไม่อยากให้อัด</option>
+              </select>
+            </div>
+
+            {/* Trust in Doctor-Signed AI */}
+            <div className="space-y-1">
+              <label className="font-semibold text-slate-200">6. ความเชื่อมั่นในคำแนะนำ AI ที่แพทย์ตรวจสอบแล้ว:</label>
+              <select
+                value={trustRating}
+                onChange={(e) => setTrustRating(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white"
+              >
+                <option value={5}>5 - เชื่อมั่นมากที่สุด</option>
+                <option value={4}>4 - เชื่อมั่น</option>
+                <option value={3}>3 - ปานกลาง</option>
+                <option value={2}>2 - ยังไม่แน่ใจ</option>
+                <option value={1}>1 - ไม่เชื่อมั่น</option>
+              </select>
+            </div>
+
             {/* NPS */}
             <div className="space-y-1">
-              <label className="font-semibold text-slate-200">5. โอกาสที่จะแนะนำสรุปคำแนะนำนี้ให้ผู้อื่น (NPS 0-10):</label>
+              <label className="font-semibold text-slate-200">7. โอกาสที่จะแนะนำสรุปคำแนะนำนี้ให้ผู้อื่น (NPS 0-10):</label>
               <input
                 type="number"
                 min="0"
