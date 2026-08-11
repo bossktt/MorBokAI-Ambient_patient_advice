@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import BackendWarmupPing from '@/components/BackendWarmupPing';
 
 export const metadata: Metadata = {
   title: 'หมอบอก (MorBok) — ระบบสรุปคำแนะนำแพทย์และตารางยาอัตโนมัติ',
@@ -26,6 +27,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
       <body className="bg-[#F9F9FF] text-[#111C2C] antialiased min-h-screen font-sans">
+        <BackendWarmupPing />
         {children}
       </body>
     </html>
