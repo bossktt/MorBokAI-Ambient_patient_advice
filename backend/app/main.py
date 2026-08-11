@@ -205,6 +205,32 @@ async def transcribe_audio(request: Request):
         "transcript": transcript
     }
 
+def count_summary_words(summary_data: dict) -> int:
+    """Counts total words/tokens in clinical summary structure for accuracy tracking."""
+    text_parts = []
+    if isinstance(summary_data, dict):
+        text_parts.append(str(summary_data.get("diagnosis", "")))
+        insts = summary_data.get("instructions") or []
+        if isinstance(insts, list):
+            text_parts.extend([str(i) for i in insts])
+        elif isinstance(insts, str):
+            text_parts.append(insts)
+
+        for m in summary_data.get("startMeds") or []:
+            text_parts.extend([str(m.get("name", "")), str(m.get("desc", "")), str(m.get("usage", ""))])
+        for m in summary_data.get("stopMeds") or []:
+            text_parts.extend([str(m.get("name", "")), str(m.get("desc", "")), str(m.get("warning", ""))])
+        for m in summary_data.get("changeMeds") or []:
+            text_parts.extend([str(m.get("name", "")), str(m.get("desc", "")), str(m.get("change", ""))])
+
+        text_parts.append(str(summary_data.get("followUpDate", "")))
+
+    combined = " ".join([p for p in text_parts if p]).strip()
+    if not combined:
+        return 0
+    return len(re.findall(r'\S+', combined))
+
+
 @app.post(f"{settings.API_PREFIX}/encounters/process-transcript")
 def process_transcript(payload: dict):
     """
@@ -223,7 +249,9 @@ def process_transcript(payload: dict):
             "startMeds": [],
             "stopMeds": [],
             "changeMeds": [],
-            "followUpDate": "ตามนัดหมายแพทย์"
+            "followUpDate": "ตามนัดหมายแพทย์",
+            "llm_calculation_time_sec": 0.0,
+            "llm_draft_word_count": 0
         }
 
     # 1. Sanitize raw transcript
@@ -233,9 +261,11 @@ def process_transcript(payload: dict):
     }
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
 
-    # 2. Process through LLM Adapter (Gemini 2.5 Flash Lite ZDR)
+    # 2. Process through LLM Adapter (Gemini 2.5 Flash Lite ZDR) with time measurement
     adapter = get_llm_adapter()
+    t_start = time.time()
     raw_summary = adapter.generate_clinical_summary(sanitized_text)
+    llm_calc_time_sec = round(time.time() - t_start, 2)
 
     # 3. Rehydrate summary
     rehydrated = DeIdentificationEngine.rehydrate_summary(raw_summary, meta)
@@ -279,6 +309,16 @@ def process_transcript(payload: dict):
 
     follow_up = patient_view.get("follow_up", {}).get("date") or patient_view.get("follow_up", {}).get("follow_up_date_thai") or "ตามนัดหมายแพทย์ (หากมีอาการไข้สูงเกิน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"
 
+    draft_summary_dict = {
+        "diagnosis": diagnosis,
+        "instructions": instructions,
+        "startMeds": start_meds,
+        "stopMeds": stop_meds,
+        "changeMeds": change_meds,
+        "followUpDate": follow_up
+    }
+    llm_draft_words = count_summary_words(draft_summary_dict)
+
     response_payload = {
         "status": "SUCCESS",
         "diagnosis": diagnosis,
@@ -286,7 +326,9 @@ def process_transcript(payload: dict):
         "startMeds": start_meds,
         "stopMeds": stop_meds,
         "changeMeds": change_meds,
-        "followUpDate": follow_up
+        "followUpDate": follow_up,
+        "llm_calculation_time_sec": llm_calc_time_sec,
+        "llm_draft_word_count": llm_draft_words
     }
 
     # Append log entry (Syncs to Google Drive)
@@ -385,6 +427,21 @@ def export_encounter_pdf(encounter_id: str, payload: dict):
         "license_no": "-"
     })
     summary_data = payload.get("summary_data", payload)
+    telemetry_data = payload.get("telemetry", {})
+
+    # Record background telemetry automatically
+    if telemetry_data:
+        TelemetryService.record_evaluation({
+            "role": "SYSTEM_BACKGROUND_TELEMETRY",
+            "encounter_id": encounter_id,
+            "doctor_license": doctor_info.get("license_no", "N/A"),
+            "time_to_clinical_llm_sec": telemetry_data.get("time_to_clinical_llm_sec", 0.0),
+            "time_llm_to_final_doctor_edit_sec": telemetry_data.get("time_llm_to_final_doctor_edit_sec", 0.0),
+            "manual_edit_count": telemetry_data.get("manual_edit_count", 0),
+            "llm_draft_word_count": telemetry_data.get("llm_draft_word_count", 0),
+            "final_doctor_word_count": telemetry_data.get("final_doctor_word_count", 0),
+            "word_count_diff": telemetry_data.get("word_count_diff", 0)
+        })
 
     pdf_result = PDFService.generate_patient_summary_pdf(
         encounter_id=encounter_id,

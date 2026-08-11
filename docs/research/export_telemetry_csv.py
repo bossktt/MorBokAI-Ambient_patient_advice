@@ -27,6 +27,7 @@ def export_telemetry_csv():
 
     doctor_rows = []
     patient_rows = []
+    system_rows = []
 
     with open(LOG_PATH, "r", encoding="utf-8") as f:
         for line in f:
@@ -38,7 +39,20 @@ def export_telemetry_csv():
             p = entry.get("payload", {})
             role = entry.get("role") or p.get("role", "UNKNOWN")
 
-            if role == "DOCTOR":
+            if role == "SYSTEM_BACKGROUND_TELEMETRY":
+                system_rows.append({
+                    "eval_id": record_id,
+                    "timestamp": timestamp,
+                    "encounter_id": p.get("encounter_id", ""),
+                    "doctor_license": p.get("doctor_license", ""),
+                    "time_to_clinical_llm_sec": p.get("time_to_clinical_llm_sec", ""),
+                    "time_llm_to_final_doctor_edit_sec": p.get("time_llm_to_final_doctor_edit_sec", ""),
+                    "manual_edit_count": p.get("manual_edit_count", ""),
+                    "llm_draft_word_count": p.get("llm_draft_word_count", ""),
+                    "final_doctor_word_count": p.get("final_doctor_word_count", ""),
+                    "word_count_diff": p.get("word_count_diff", "")
+                })
+            elif role == "DOCTOR":
                 doctor_rows.append({
                     "eval_id": record_id,
                     "timestamp": timestamp,
@@ -48,11 +62,8 @@ def export_telemetry_csv():
                     "manual_edit_count": p.get("manual_edit_count", ""),
                     "overall_satisfaction_csat": p.get("overall_satisfaction_csat", ""),
                     "workload_reduction_satisfaction": p.get("workload_reduction_satisfaction", ""),
-                    "perceived_patient_impact": p.get("perceived_patient_impact", ""),
-                    "doctor_nps_score": p.get("doctor_nps_score", ""),
-                    "clinical_accuracy_rating": p.get("clinical_accuracy_rating", ""),
-                    "grade5_language_rating": p.get("grade5_language_rating", ""),
-                    "sus_total_score": p.get("sus_total", ""),
+                    "clinical_accuracy_rating_1_10": p.get("clinical_accuracy_rating", ""),
+                    "doctor_nps_score_0_10": p.get("doctor_nps_score", ""),
                     "comments": p.get("comments", "")
                 })
             elif role in ["PATIENT", "CAREGIVER"]:
@@ -69,11 +80,19 @@ def export_telemetry_csv():
                     "patient_nps_score": p.get("patient_nps_score", ""),
                     "red_flag_recall_score_pct": p.get("red_flag_recall_score", ""),
                     "med_instruction_recall_score_pct": p.get("med_instruction_recall_score", ""),
-                    "reading_ease_rating": p.get("reading_ease_rating", ""),
                     "ambient_mic_comfort_rating": p.get("ambient_mic_comfort_rating", ""),
-                    "audio_playback_used": p.get("audio_playback_used", ""),
+                    "trust_in_ai_rating": p.get("trust_in_ai_rating", ""),
                     "comments": p.get("comments", "")
                 })
+
+    # Write System Telemetry CSV
+    sys_csv_path = os.path.join(OUTPUT_DIR, "system_background_telemetry.csv")
+    if system_rows:
+        with open(sys_csv_path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=system_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(system_rows)
+        print(f"✅ Exported {len(system_rows)} System Telemetry records to: {sys_csv_path}")
 
     # Write Clinician CSV
     doc_csv_path = os.path.join(OUTPUT_DIR, "clinician_satisfaction_evaluations.csv")
@@ -93,8 +112,8 @@ def export_telemetry_csv():
             writer.writerows(patient_rows)
         print(f"✅ Exported {len(patient_rows)} Patient/Caregiver records to: {pat_csv_path}")
 
-    if not doctor_rows and not patient_rows:
-        print("ℹ️ No doctor or patient evaluation records found to export.")
+    if not doctor_rows and not patient_rows and not system_rows:
+        print("ℹ️ No evaluation records found to export.")
 
 if __name__ == "__main__":
     export_telemetry_csv()

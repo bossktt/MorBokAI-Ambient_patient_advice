@@ -104,8 +104,11 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
               if (data.changeMeds) setChangeMeds(data.changeMeds);
               if (data.followUpDate) setFollowUpDate(data.followUpDate);
 
-              // Telemetry: Store original AI draft for edit diff tracking
+              // Telemetry: Store original AI draft, LLM calculation time, and draft word count
               localStorage.setItem(`morbok_telemetry_${encounterId}_original_draft`, JSON.stringify(data));
+              localStorage.setItem(`morbok_telemetry_${encounterId}_llm_calc_time_sec`, String(data.llm_calculation_time_sec || 0));
+              localStorage.setItem(`morbok_telemetry_${encounterId}_llm_completed_at`, String(Date.now()));
+              localStorage.setItem(`morbok_telemetry_${encounterId}_llm_draft_word_count`, String(data.llm_draft_word_count || 0));
             }
           })
           .catch((err) => {
@@ -183,22 +186,54 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       is_anonymous: isAnonymous,
     };
 
+    // Calculate background telemetry metrics
+    const llmCalcTimeSec = parseFloat(localStorage.getItem(`morbok_telemetry_${encounterId}_llm_calc_time_sec`) || '0');
+    const llmCompletedAt = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_llm_completed_at`) || '0', 10);
+    const timeLlmToDoctorEditSec = llmCompletedAt > 0 ? Math.round((Date.now() - llmCompletedAt) / 1000) : 0;
+    const editCount = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_edit_count`) || '0', 10);
+    const llmDraftWordCount = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_llm_draft_word_count`) || '0', 10);
+
+    const countWords = (obj: typeof summaryData) => {
+      const parts: string[] = [];
+      if (obj.diagnosis) parts.push(obj.diagnosis);
+      if (Array.isArray(obj.instructions)) parts.push(...obj.instructions);
+      (obj.startMeds || []).forEach((m) => parts.push(m.name, m.desc, m.usage));
+      (obj.stopMeds || []).forEach((m) => parts.push(m.name, m.desc, m.warning));
+      (obj.changeMeds || []).forEach((m) => parts.push(m.name, m.desc, m.change));
+      if (obj.followUpDate) parts.push(obj.followUpDate);
+      const text = parts.filter(Boolean).join(' ').trim();
+      return text ? text.split(/\s+/).length : 0;
+    };
+
+    const finalDoctorWordCount = countWords(summaryData);
+    const wordCountDiff = Math.abs(finalDoctorWordCount - llmDraftWordCount);
+
+    const telemetryPayload = {
+      time_to_clinical_llm_sec: llmCalcTimeSec,
+      time_llm_to_final_doctor_edit_sec: timeLlmToDoctorEditSec,
+      manual_edit_count: editCount,
+      llm_draft_word_count: llmDraftWordCount,
+      final_doctor_word_count: finalDoctorWordCount,
+      word_count_diff: wordCountDiff
+    };
+
     try {
       const res = await fetch(`${API_BASE}/api/v1/encounters/${encounterId}/export-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           doctor_info: finalDoctorInfo,
-          summary_data: summaryData
+          summary_data: summaryData,
+          telemetry: telemetryPayload
         })
       });
       const data = await res.json();
       const pdfId = data.pdf_id || `PDF_${Math.floor(100000 + Math.random() * 900000)}`;
 
-      // Telemetry: Save edit count and final draft for Screen 5 analysis
-      const editCount = parseInt(localStorage.getItem(`morbok_telemetry_${encounterId}_edit_count`) || '0', 10);
+      // Telemetry: Save final draft & telemetry metrics for local reference
       localStorage.setItem(`morbok_telemetry_${encounterId}_edit_count`, String(editCount));
       localStorage.setItem(`morbok_telemetry_${encounterId}_final_draft`, JSON.stringify(summaryData));
+      localStorage.setItem(`morbok_telemetry_${encounterId}_metrics`, JSON.stringify(telemetryPayload));
 
       router.push(`/doctor/encounter/${encounterId}/pdf?pdf_id=${pdfId}`);
     } catch (e) {

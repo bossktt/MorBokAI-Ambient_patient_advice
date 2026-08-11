@@ -22,26 +22,32 @@ class TelemetryService:
         Persists a telemetry/survey evaluation entry into telemetry_evaluations.jsonl.
         
         Payload formats:
+        - System / Background Telemetry evaluation:
+          {
+            "role": "SYSTEM_BACKGROUND_TELEMETRY",
+            "encounter_id": "ENC_XXXXX",
+            "doctor_license": "ว.12345",
+            "time_to_clinical_llm_sec": 3.42,            # Time to clinical LLM calculation
+            "time_llm_to_final_doctor_edit_sec": 18.5,  # Time from LLM calculation to final doctor edit
+            "manual_edit_count": 2,                      # Count of manual doctor edits
+            "llm_draft_word_count": 120,                 # Word count of initial LLM draft
+            "final_doctor_word_count": 125,              # Word count of final doctor note
+            "word_count_diff": 5                         # Absolute word count diff for accuracy tracking
+          }
+
         - Doctor evaluation:
           {
             "role": "DOCTOR",
             "encounter_id": "ENC_XXXXX",
             "doctor_license": "ว.12345",
-            "time_to_sign_off_sec": 24.5,
-            "manual_edit_count": 2,
-            "sus_scores": [4, 5, 4, 5, 4, 5, 5, 4, 5, 5],
-            "sus_total": 92.5,
-            "overall_satisfaction_csat": 5,      # 1-5 Likert
+            "clinical_accuracy_rating": 9,      # 1-10 Scale
+            "doctor_nps_score": 10,             # 0-10 Score
+            "overall_satisfaction_csat": 5,     # 1-5 Likert
             "workload_reduction_satisfaction": 5, # 1-5 Likert
-            "perceived_patient_impact": 5,       # 1-5 Likert
-            "doctor_nps_score": 9,               # 0-10 Score
-            "clinical_accuracy_rating": 5,
-            "grade5_language_rating": 5,
-            "linked_audio_utility_rating": 4,
             "comments": "ช่วยลดเวลาเขียนใบนัดได้ดีมาก"
           }
 
-        - Patient / Caregiver evaluation:
+        - Patient / Caregiver evaluation (LINE OA Survey - Patient Only):
           {
             "role": "PATIENT",
             "encounter_id": "ENC_XXXXX",
@@ -54,11 +60,9 @@ class TelemetryService:
             "patient_nps_score": 10,                 # 0-10 Score
             "red_flag_recall_score": 100,            # %
             "med_instruction_recall_score": 100,      # %
-            "reading_ease_rating": 5,
             "ambient_mic_comfort_rating": 4,
             "trust_in_ai_rating": 5,
-            "audio_playback_used": True,
-            "comments": "สรุปชัดเจน เข้าใจง่าย มีเสียงให้ฟังย้อนหลัง"
+            "comments": "สรุปชัดเจน เข้าใจง่าย"
           }
         """
         os.makedirs(settings.LOGS_DIR, exist_ok=True)
