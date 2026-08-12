@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { API_BASE } from '@/lib/api';
 
-export default function PatientSurveyPage() {
+function PatientSurveyContent() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
@@ -222,5 +222,13 @@ export default function PatientSurveyPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PatientSurveyPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Loading...</div>}>
+      <PatientSurveyContent />
+    </Suspense>
   );
 }
