@@ -464,11 +464,25 @@ def export_encounter_pdf(encounter_id: str, payload: dict):
 
     cache_set(f"encounter:{encounter_id}:status", "PDF_GENERATED")
     cache_set(f"encounter:{encounter_id}:pdf_id", pdf_id)
+    cache_set(f"draft_summary:{encounter_id}", json.dumps(summary_data))
 
     base_url = getattr(settings, "PUBLIC_BASE_URL", "") or os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
     if not base_url:
         base_url = f"http://localhost:8080"
     download_url = f"{base_url}{settings.API_PREFIX}/pdf/{pdf_id}/download"
+
+    # Append log entry for final doctor-edited summary & PDF creation (Auto-syncs to Google Drive)
+    pdf_log_entry = {
+        "event": "PDF_CREATED",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
+        "encounter_id": encounter_id,
+        "doctor_info": doctor_info,
+        "clinical_summary": summary_data,
+        "pdf_id": pdf_id,
+        "download_url": download_url,
+        "telemetry": telemetry_data
+    }
+    append_encounter_log(pdf_log_entry)
 
     return {
         "status": "PDF_CREATED",
