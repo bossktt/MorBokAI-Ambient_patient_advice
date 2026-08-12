@@ -12,6 +12,7 @@ import time
 import datetime
 from typing import Dict, Any, List, Optional
 from app.core.config import settings
+from app.services.gdrive_sync import sync_log_to_gdrive_async
 
 TELEMETRY_LOG_PATH = os.path.join(settings.LOGS_DIR, "telemetry_evaluations.jsonl")
 
@@ -80,6 +81,12 @@ class TelemetryService:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except Exception as e:
             print(f"⚠️ Failed to record telemetry evaluation: {e}")
+
+        # Auto-sync telemetry evaluation log to Google Drive (non-blocking background thread)
+        try:
+            sync_log_to_gdrive_async(record)
+        except Exception as e:
+            print(f"⚠️ Failed to sync telemetry log to Google Drive: {e}")
 
         return record
 
