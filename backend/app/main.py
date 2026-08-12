@@ -479,7 +479,6 @@ def export_encounter_pdf(encounter_id: str, payload: dict):
         "doctor_info": doctor_info,
         "clinical_summary": summary_data,
         "pdf_id": pdf_id,
-        "download_url": download_url,
         "telemetry": telemetry_data
     }
     append_encounter_log(pdf_log_entry)
