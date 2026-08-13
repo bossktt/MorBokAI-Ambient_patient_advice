@@ -173,7 +173,9 @@ class OpenRouterAdapter(BaseLLMAdapter):
         req_payload = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt_text}],
-            "response_format": {"type": "json_object"}
+            "response_format": {"type": "json_object"},
+            "temperature": settings.SUMMARY_GENERATION_TEMPERATURE,
+            "seed": settings.SUMMARY_GENERATION_SEED,
         }
 
         provider_pref = getattr(settings, "OPENROUTER_PROVIDER", None)
@@ -222,7 +224,14 @@ class GeminiAdapter(BaseLLMAdapter):
             res = requests.post(
                 url,
                 headers={"Content-Type": "application/json"},
-                json={"contents": [{"parts": [{"text": prompt_text}]}]},
+                json={
+                    "contents": [{"parts": [{"text": prompt_text}]}],
+                    "generationConfig": {
+                        "temperature": settings.SUMMARY_GENERATION_TEMPERATURE,
+                        "seed": settings.SUMMARY_GENERATION_SEED,
+                        "responseMimeType": "application/json",
+                    },
+                },
                 timeout=15
             )
             raw_res = res.json()

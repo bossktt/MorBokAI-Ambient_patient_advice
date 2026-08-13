@@ -27,6 +27,7 @@ import time
 import json
 import re
 import uuid
+import hashlib
 import datetime
 from typing import Dict, Any
 
@@ -113,6 +114,22 @@ def cache_get(key: str):
         except Exception:
             pass
     return memory_store.get(key)
+
+
+def summary_input_fingerprint(encounter_id: str, sanitized_transcript: str) -> str:
+    """Stable per-encounter key for one approved transcript and generation contract."""
+    model = settings.OPENROUTER_MODEL if settings.DEFAULT_LLM_PROVIDER == "openrouter" else settings.GEMINI_MODEL
+    contract = {
+        "encounter_id": encounter_id,
+        "transcript": sanitized_transcript,
+        "provider": settings.DEFAULT_LLM_PROVIDER,
+        "model": model,
+        "prompt_version": settings.SUMMARY_PROMPT_VERSION,
+        "temperature": settings.SUMMARY_GENERATION_TEMPERATURE,
+        "seed": settings.SUMMARY_GENERATION_SEED,
+    }
+    encoded = json.dumps(contract, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 def cleanup_expired_pdfs():
     """
@@ -275,7 +292,26 @@ def process_transcript(payload: dict):
             "llm_draft_word_count": 0,
         }
 
-    # 2. Process through LLM Adapter (Gemini 2.5 Flash Lite ZDR) with time measurement
+    # The approved transcript is the idempotency key. A re-generate request with
+    # identical input must return the same clinically grounded draft, even if the
+    # upstream model is stochastic or a provider fallback changes later.
+    input_fingerprint = summary_input_fingerprint(encounter_id, sanitized_text)
+    summary_cache_key = f"clinical_summary:{input_fingerprint}"
+    cached_summary = cache_get(summary_cache_key)
+    if cached_summary:
+        try:
+            cached_payload = json.loads(cached_summary)
+            cached_payload["summary_cache"] = {
+                "status": "HIT",
+                "input_fingerprint": input_fingerprint,
+                "prompt_version": settings.SUMMARY_PROMPT_VERSION,
+            }
+            return cached_payload
+        except (TypeError, ValueError, json.JSONDecodeError):
+            # Treat corrupt cache data as a miss; never return an unknown draft.
+            pass
+
+    # 2. Process through the LLM adapter with deterministic sampling settings.
     adapter = get_llm_adapter()
     t_start = time.time()
     raw_summary = adapter.generate_clinical_summary(sanitized_text)
@@ -351,8 +387,18 @@ def process_transcript(payload: dict):
         "changeMeds": change_meds,
         "followUpDate": follow_up,
         "llm_calculation_time_sec": llm_calc_time_sec,
-        "llm_draft_word_count": llm_draft_words
+        "llm_draft_word_count": llm_draft_words,
+        "summary_cache": {
+            "status": "MISS",
+            "input_fingerprint": input_fingerprint,
+            "prompt_version": settings.SUMMARY_PROMPT_VERSION,
+        },
     }
+
+    # Cache only usable, source-grounded drafts. A transient provider failure
+    # must not lock the clinician into an empty result.
+    if response_payload["status"] == "SUCCESS":
+        cache_set(summary_cache_key, json.dumps(response_payload, ensure_ascii=False))
 
     # Append log entry (Syncs to Google Drive)
     log_entry = {

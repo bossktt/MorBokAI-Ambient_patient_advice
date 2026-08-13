@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.5-flash-lite"
     GEMINI_API_KEY: Optional[str] = None
 
+    # Repeatable clinical extraction. Temperature reduces variation, while the
+    # server-side content-addressed cache is the hard consistency guarantee.
+    SUMMARY_GENERATION_TEMPERATURE: float = 0.0
+    SUMMARY_GENERATION_SEED: int = 42
+    SUMMARY_PROMPT_VERSION: str = "grounded-clinical-summary-v1"
+
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
     GCP_KEY_PATH: Optional[str] = "gcp-key.json"

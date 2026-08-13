@@ -34,6 +34,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null }>({ status: 'UNKNOWN' });
   const [clinicalStatus, setClinicalStatus] = useState<string>('NOT_STARTED');
   const [clinicalMessage, setClinicalMessage] = useState<string>('');
+  const [summaryCache, setSummaryCache] = useState<{ status: string; input_fingerprint?: string }>({ status: 'NOT_STARTED' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -103,6 +104,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           .then((data) => {
             setClinicalStatus(data.clinical_extraction_status || data.status || 'UNKNOWN');
             setClinicalMessage(data.message || data.error || '');
+            setSummaryCache(data.summary_cache || { status: 'NOT_CACHED' });
             if (data.status === 'SUCCESS') {
               const rawDiag = (data.diagnosis || '').trim();
               const invalidKeywords = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', 'ไม่พบการวินิจฉัย', 'no diagnosis', 'not specified'];
@@ -322,6 +324,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           <div className={`rounded-xl border px-3 py-2 ${clinicalStatus === 'GROUNDED' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
             CLINICAL_EXTRACTION_STATUS: {clinicalStatus}
             {clinicalMessage ? ` · ${clinicalMessage}` : ''}
+          </div>
+          <div className={`rounded-xl border px-3 py-2 ${summaryCache.status === 'HIT' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#C3C6D1] bg-white text-[#43474F]'}`}>
+            SUMMARY_CONSISTENCY_CACHE: {summaryCache.status}
+            {summaryCache.status === 'HIT' ? ' · same approved transcript, same saved summary' : ''}
           </div>
         </div>
 

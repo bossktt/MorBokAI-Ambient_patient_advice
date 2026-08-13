@@ -82,6 +82,32 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(data["changeMeds"], [])
         self.assertEqual(data["followUpDate"], "")
 
+    def test_same_approved_transcript_returns_cached_summary(self):
+        transcript = "แพทย์บอกให้พักผ่อนที่บ้าน"
+        adapter_summary = {
+            "patient_view": {
+                "diagnosis": "พักผ่อนที่บ้าน",
+                "key_instructions": ["ให้พักผ่อนที่บ้าน"],
+                "follow_up": {"date": "", "location": "", "reason": ""},
+            },
+            "medication_box": {"start": [], "stop": [], "change": []},
+            "evidence": {
+                "diagnosis": "พักผ่อนที่บ้าน",
+                "key_instructions": ["ให้พักผ่อนที่บ้าน"],
+            },
+        }
+        with patch("app.main.get_llm_adapter") as get_adapter, patch("app.main.append_encounter_log"):
+            get_adapter.return_value.generate_clinical_summary.return_value = adapter_summary
+            payload = {"encounter_id": "ENC_CACHE_CONSISTENCY", "raw_transcript": transcript}
+            first = client.post("/api/v1/encounters/process-transcript", json=payload).json()
+            second = client.post("/api/v1/encounters/process-transcript", json=payload).json()
+
+        self.assertEqual(first["summary_cache"]["status"], "MISS")
+        self.assertEqual(second["summary_cache"]["status"], "HIT")
+        self.assertEqual(get_adapter.return_value.generate_clinical_summary.call_count, 1)
+        self.assertEqual(first["diagnosis"], second["diagnosis"])
+        self.assertEqual(first["instructions"], second["instructions"])
+
 
 if __name__ == "__main__":
     unittest.main()
