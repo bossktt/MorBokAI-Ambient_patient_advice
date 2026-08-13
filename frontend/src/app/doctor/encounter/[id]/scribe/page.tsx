@@ -224,6 +224,9 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     // source whenever it is available; never concatenate two competing ASRs.
     let finalTranscript = '';
     let transcriptSource = 'backend_asr';
+    let asrStatus = 'FAILED';
+    let asrProvider: string | null = null;
+    let asrErrorMessage = '';
 
     // Transcribe recorded audio via backend ASR if chunks exist
     const chunks = chunksRef.current;
@@ -241,22 +244,28 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         setDebugInfo((d) => `${d}\n⬇️ ASR response: ${JSON.stringify(data).slice(0, 120)}`);
         if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim()) {
           finalTranscript = data.transcript.trim();
+          asrStatus = 'SUCCESS';
+          asrProvider = data.provider || 'backend';
           setAsrError('');
         } else {
           transcriptSource = 'browser_preview_after_asr_failure';
           finalTranscript = typedText;
-          setAsrError(data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป');
+          asrErrorMessage = data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+          setAsrError(asrErrorMessage);
         }
       } catch (e) {
         console.warn('Backend transcription failed:', e);
         const errMsg = e instanceof Error ? e.message : String(e);
         setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${errMsg}`);
-        setAsrError('การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป');
+        asrErrorMessage = 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+        setAsrError(asrErrorMessage);
         transcriptSource = 'browser_preview_after_asr_failure';
         finalTranscript = typedText;
       }
     } else {
       setDebugInfo((d) => `${d}\n⚠️ no chunks recorded (${mimeTypeRef.current})`);
+      asrStatus = 'NO_AUDIO';
+      asrErrorMessage = 'ไม่พบไฟล์เสียงจากเครื่องบันทึก';
       transcriptSource = 'browser_preview_no_audio';
       finalTranscript = typedText;
     }
@@ -265,6 +274,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
       localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
       localStorage.setItem('pvs_transcript_latest', finalTranscript);
       localStorage.setItem(`pvs_transcript_source_${encounterId}`, transcriptSource);
+      localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+        status: asrStatus,
+        provider: asrProvider,
+        error: asrErrorMessage || null,
+      }));
     }
 
     router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);

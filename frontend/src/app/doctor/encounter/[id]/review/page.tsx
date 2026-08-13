@@ -31,6 +31,9 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null }>({ status: 'UNKNOWN' });
+  const [clinicalStatus, setClinicalStatus] = useState<string>('NOT_STARTED');
+  const [clinicalMessage, setClinicalMessage] = useState<string>('');
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -74,6 +77,10 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         localStorage.getItem('pvs_transcript_latest');
       const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
       setTranscriptSource(savedSource);
+      const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
+      if (savedAsrResult) {
+        try { setAsrResult(JSON.parse(savedAsrResult)); } catch (e) { setAsrResult({ status: 'UNKNOWN' }); }
+      }
 
       if (savedTranscript) {
         setRawTranscript(savedTranscript);
@@ -94,6 +101,8 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         })
           .then((res) => res.json())
           .then((data) => {
+            setClinicalStatus(data.clinical_extraction_status || data.status || 'UNKNOWN');
+            setClinicalMessage(data.message || data.error || '');
             if (data.status === 'SUCCESS') {
               const rawDiag = (data.diagnosis || '').trim();
               const invalidKeywords = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', 'ไม่พบการวินิจฉัย', 'no diagnosis', 'not specified'];
@@ -303,6 +312,17 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           <p className="text-xs text-[#43474F]">
             กรุณาตรวจสอบและแก้ไขความถูกต้องของคำแนะนำ ก่อนกดออกเอกสาร PDF ให้คนไข้
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 text-xs font-bold">
+          <div className={`rounded-xl border px-3 py-2 ${asrResult.status === 'SUCCESS' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
+            ASR_STATUS: {asrResult.status}{asrResult.provider ? ` · ${asrResult.provider}` : ''}
+            {asrResult.error ? ` · ${asrResult.error}` : ''}
+          </div>
+          <div className={`rounded-xl border px-3 py-2 ${clinicalStatus === 'GROUNDED' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
+            CLINICAL_EXTRACTION_STATUS: {clinicalStatus}
+            {clinicalMessage ? ` · ${clinicalMessage}` : ''}
+          </div>
         </div>
 
         {/* Canonical transcript: this exact text is the only input sent to the LLM. */}

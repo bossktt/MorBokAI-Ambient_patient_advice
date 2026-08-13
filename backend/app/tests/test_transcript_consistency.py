@@ -66,6 +66,21 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(data["diagnosis"], "")
         self.assertEqual(data["instructions"], [])
         self.assertEqual(data["startMeds"], [])
+        self.assertEqual(data["status"], "CANNOT_EXTRACT_SAFELY")
+        self.assertEqual(data["clinical_extraction_status"], "CANNOT_EXTRACT_SAFELY")
+        self.assertTrue(data["message"])
+
+    def test_empty_transcript_returns_explicit_safe_empty_contract(self):
+        response = client.post("/api/v1/encounters/process-transcript", json={"raw_transcript": ""})
+        data = response.json()
+        self.assertEqual(data["status"], "CANNOT_EXTRACT_SAFELY")
+        self.assertEqual(data["clinical_extraction_status"], "CANNOT_EXTRACT_SAFELY")
+        self.assertEqual(data["diagnosis"], "")
+        self.assertEqual(data["instructions"], [])
+        self.assertEqual(data["startMeds"], [])
+        self.assertEqual(data["stopMeds"], [])
+        self.assertEqual(data["changeMeds"], [])
+        self.assertEqual(data["followUpDate"], "")
 
 
 if __name__ == "__main__":

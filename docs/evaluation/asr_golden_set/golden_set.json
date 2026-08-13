@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "language": ["th-TH", "en-US clinical terms"],
+  "de_identified": true,
+  "approval_policy": "Every reference transcript requires clinician review before use as a release gate.",
+  "cases": [
+    {
+      "id": "thai_medication_change_001",
+      "audio_file": "audio/thai_medication_change_001.webm",
+      "audio_status": "PENDING_AUDIO_CAPTURE",
+      "approval_status": "PENDING_CLINICIAN_APPROVAL",
+      "reference_transcript": "แพทย์ปรับยา Metformin เป็น 1000 มิลลิกรัม รับประทานเช้าและเย็นหลังอาหาร และให้หยุดยาเดิม 500 มิลลิกรัม",
+      "required_facts": {
+        "medications": ["Metformin"],
+        "doses": ["1000 มิลลิกรัม", "500 มิลลิกรัม"],
+        "instructions": ["เช้าและเย็นหลังอาหาร", "หยุดยาเดิม"]
+      }
+    },
+    {
+      "id": "thai_english_chest_pain_001",
+      "audio_file": "audio/thai_english_chest_pain_001.webm",
+      "audio_status": "PENDING_AUDIO_CAPTURE",
+      "approval_status": "PENDING_CLINICIAN_APPROVAL",
+      "reference_transcript": "ผู้ป่วยมีอาการแน่นหน้าอกมา 2 ชั่วโมง แพทย์บอกให้กลับ emergency ทันทีถ้าเจ็บมากขึ้นหรือหายใจลำบาก",
+      "required_facts": {
+        "symptoms": ["แน่นหน้าอก", "2 ชั่วโมง"],
+        "red_flags": ["เจ็บมากขึ้น", "หายใจลำบาก"],
+        "english_terms": ["emergency"]
+      }
+    },
+    {
+      "id": "thai_english_asthma_001",
+      "audio_file": "audio/thai_english_asthma_001.webm",
+      "audio_status": "PENDING_AUDIO_CAPTURE",
+      "approval_status": "PENDING_CLINICIAN_APPROVAL",
+      "reference_transcript": "วันนี้ asthma ดีขึ้น ให้ใช้ inhaler ตามที่แพทย์สั่ง และกลับมาตรวจถ้าหอบหรือพูดเป็นประโยคไม่ได้",
+      "required_facts": {
+        "diagnosis_terms": ["asthma"],
+        "instructions": ["ใช้ inhaler ตามที่แพทย์สั่ง"],
+        "red_flags": ["หอบ", "พูดเป็นประโยคไม่ได้"]
+      }
+    }
+  ]
+}

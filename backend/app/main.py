@@ -240,7 +240,9 @@ def process_transcript(payload: dict):
 
     if not raw_transcript:
         return {
-            "status": "EMPTY",
+            "status": "CANNOT_EXTRACT_SAFELY",
+            "clinical_extraction_status": "CANNOT_EXTRACT_SAFELY",
+            "message": "ไม่มีต้นฉบับถอดเสียงที่ตรวจสอบได้ จึงไม่สร้างคำแนะนำทางคลินิก",
             "diagnosis": "",
             "instructions": [],
             "startMeds": [],
@@ -259,7 +261,9 @@ def process_transcript(payload: dict):
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
     if not DeIdentificationEngine.verify_zero_pii(sanitized_text, session_meta):
         return {
-            "status": "REVIEW_REQUIRED",
+            "status": "CANNOT_EXTRACT_SAFELY",
+            "clinical_extraction_status": "CANNOT_EXTRACT_SAFELY",
+            "message": "พบข้อมูลส่วนบุคคลที่ยังไม่ถูกปกปิด จึงไม่ส่งข้อความไปยัง clinical LLM",
             "error": "พบข้อมูลส่วนบุคคลที่ยังไม่ถูกปกปิด จึงไม่ส่งข้อความไปยัง clinical LLM",
             "diagnosis": "",
             "instructions": [],
@@ -334,8 +338,11 @@ def process_transcript(payload: dict):
     }
     llm_draft_words = count_summary_words(draft_summary_dict)
 
+    has_grounded_facts = any([diagnosis, instructions, start_meds, stop_meds, change_meds, follow_up])
     response_payload = {
-        "status": "SUCCESS" if any([diagnosis, instructions, start_meds, stop_meds, change_meds, follow_up]) else "REVIEW_REQUIRED",
+        "status": "SUCCESS" if has_grounded_facts else "CANNOT_EXTRACT_SAFELY",
+        "clinical_extraction_status": "GROUNDED" if has_grounded_facts else "CANNOT_EXTRACT_SAFELY",
+        "message": "" if has_grounded_facts else "ไม่พบข้อเท็จจริงทางคลินิกที่มีหลักฐานตรงกับต้นฉบับ จึงเว้นช่องว่างทั้งหมดเพื่อให้แพทย์ตรวจสอบ",
         "canonical_transcript": raw_transcript,
         "diagnosis": diagnosis,
         "instructions": instructions,
