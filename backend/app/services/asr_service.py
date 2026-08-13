@@ -5,11 +5,34 @@ import struct
 import requests
 import json
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ASRResult:
+    """One canonical ASR result; an empty transcript is never a success."""
+
+    transcript: str = ""
+    status: str = "FAILED"
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    error: Optional[str] = None
+    confidence: Optional[float] = None
+
+    def as_dict(self) -> dict:
+        return {
+            "transcript": self.transcript,
+            "status": self.status,
+            "provider": self.provider,
+            "model": self.model,
+            "error": self.error,
+            "confidence": self.confidence,
+        }
 
 def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """
@@ -57,7 +80,7 @@ class MultiTierASRService:
     - Step 1 (Primary): OpenRouter ASR (openai/whisper-large-v3-turbo -> fish-audio/transcribe-1 -> nvidia/parakeet-tdt-0.6b-v3)
     - Step 2 (Secondary): AssemblyAI ASR (https://api.assemblyai.com/v2)
     - Step 3 (Tertiary): Google Speech-to-Text (via gcp-key.json credentials)
-    - Step 4 (Offline Fallback): Demo Thai Transcript for local testing
+    - No synthetic transcript fallback; failures are surfaced to the doctor.
     """
 
     @staticmethod
@@ -65,7 +88,7 @@ class MultiTierASRService:
         """
         Transcribes audio bytes using AssemblyAI REST API
         """
-        api_key = settings.ASSEMBLYAI_API_KEY or os.environ.get("ASSEMBLYAI_API_KEY") or "ef84aec176e14512970748da5852a186"
+        api_key = settings.ASSEMBLYAI_API_KEY or os.environ.get("ASSEMBLYAI_API_KEY")
         if not api_key or len(audio_bytes) < 100:
             return None
 
@@ -130,12 +153,10 @@ class MultiTierASRService:
         return None
 
     @staticmethod
-    def transcribe_audio_bytes(audio_bytes: bytes, sample_rate: int = 16000, mime_type: str = "audio/webm") -> str:
-        """
-        Transcribes incoming audio bytes via Multi-Tier ASR Pipeline.
-        """
+    def transcribe_audio_result(audio_bytes: bytes, sample_rate: int = 16000, mime_type: str = "audio/webm") -> ASRResult:
+        """Transcribe audio and retain enough metadata to explain failures."""
         if not audio_bytes or len(audio_bytes) < 100:
-            return "หมอขอปรับเพิ่มยา Metformin เป็น 1000mg เช้าเย็น หลังอาหารทันที แล้วให้ทิ้งยาตัวสีขาวเดิมซองเก่าทันทีเลยนะ ส่วนยาลดความดัน Amlodipine ให้ปรับลดเหลือ 1 เม็ดก่อนนอน"
+            return ASRResult(status="EMPTY", error="เสียงสั้นเกินไปหรือไม่มีข้อมูลเสียง")
 
         wav_bytes = ensure_wav_bytes(audio_bytes, sample_rate)
 
@@ -172,7 +193,12 @@ class MultiTierASRService:
                         text = response.json().get("text", "").strip()
                         if text:
                             logger.info(f"Step 1 (OpenRouter ASR with {model_name}) succeeded.")
-                            return text
+                            return ASRResult(
+                                transcript=text,
+                                status="SUCCESS",
+                                provider="openrouter",
+                                model=model_name,
+                            )
                         else:
                             logger.info(f"Step 1 (OpenRouter ASR with {model_name}) returned 200 OK.")
                 except Exception as e:
@@ -184,7 +210,12 @@ class MultiTierASRService:
         assembly_text = MultiTierASRService._transcribe_assemblyai(wav_bytes)
         if assembly_text:
             logger.info("Step 2 (AssemblyAI Speech-to-Text) succeeded.")
-            return assembly_text
+            return ASRResult(
+                transcript=assembly_text,
+                status="SUCCESS",
+                provider="assemblyai",
+                model="assemblyai-th",
+            )
 
         # =========================================================================
         # STEP 3: Tertiary ASR - Google Speech-to-Text (gcp-key.json)
@@ -226,16 +257,28 @@ class MultiTierASRService:
                 final_text = " ".join(results_text).strip()
                 if final_text:
                     logger.info("Step 3 (Google Speech-to-Text via gcp-key.json) succeeded.")
-                    return final_text
+                    return ASRResult(
+                        transcript=final_text,
+                        status="SUCCESS",
+                        provider="google",
+                        model="google-speech-default-th-TH",
+                    )
             except Exception as e:
                 logger.warning(f"Step 3 (Google Speech-to-Text) failed: {e}")
         else:
             logger.info(f"GCP Key file not found at {gcp_key_path}, skipping Step 3 Google ASR.")
 
-        # =========================================================================
-        # STEP 4: Offline Demo Fallback
-        # =========================================================================
-        return "หมอขอปรับเพิ่มยา Metformin เป็น 1000mg เช้าเย็น หลังอาหารทันที แล้วให้ทิ้งยาตัวสีขาวเดิมซองเก่าทันทีเลยนะ ส่วนยาลดความดัน Amlodipine ให้ปรับลดเหลือ 1 เม็ดก่อนนอน"
+        return ASRResult(
+            status="FAILED",
+            error="ไม่สามารถถอดเสียงได้จากผู้ให้บริการ ASR ที่ตั้งค่าไว้",
+        )
+
+    @staticmethod
+    def transcribe_audio_bytes(audio_bytes: bytes, sample_rate: int = 16000, mime_type: str = "audio/webm") -> str:
+        """Backward-compatible text-only wrapper for existing callers."""
+        return MultiTierASRService.transcribe_audio_result(
+            audio_bytes, sample_rate=sample_rate, mime_type=mime_type
+        ).transcript
 
 def get_asr_service():
     return MultiTierASRService()

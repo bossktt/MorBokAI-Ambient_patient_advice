@@ -18,6 +18,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string>('');
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string } | null>(null);
+  const [asrError, setAsrError] = useState<string>('');
 
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -219,13 +220,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
     const typedText = transcript.trim();
 
-    // Immediately persist current live transcript to localStorage
-    if (typeof window !== 'undefined' && typedText) {
-      localStorage.setItem(`pvs_transcript_${encounterId}`, typedText);
-      localStorage.setItem('pvs_transcript_latest', typedText);
-    }
-
-    let finalTranscript = typedText;
+    // Browser speech is preview only. The completed recording is the canonical
+    // source whenever it is available; never concatenate two competing ASRs.
+    let finalTranscript = '';
+    let transcriptSource = 'backend_asr';
 
     // Transcribe recorded audio via backend ASR if chunks exist
     const chunks = chunksRef.current;
@@ -238,34 +236,35 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           headers: { 'Content-Type': mimeTypeRef.current },
           body: blob,
         });
+        if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
         const data = await res.json();
         setDebugInfo((d) => `${d}\n⬇️ ASR response: ${JSON.stringify(data).slice(0, 120)}`);
-        if (data.transcript && data.transcript.trim()) {
-          const asrText = data.transcript.trim();
-          if (typedText && !typedText.includes(asrText)) {
-            finalTranscript = `${typedText}\n${asrText}`;
-          } else if (!typedText) {
-            finalTranscript = asrText;
-          }
+        if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim()) {
+          finalTranscript = data.transcript.trim();
+          setAsrError('');
+        } else {
+          transcriptSource = 'browser_preview_after_asr_failure';
+          finalTranscript = typedText;
+          setAsrError(data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป');
         }
       } catch (e) {
         console.warn('Backend transcription failed:', e);
         const errMsg = e instanceof Error ? e.message : String(e);
         setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${errMsg}`);
+        setAsrError('การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป');
+        transcriptSource = 'browser_preview_after_asr_failure';
+        finalTranscript = typedText;
       }
     } else {
       setDebugInfo((d) => `${d}\n⚠️ no chunks recorded (${mimeTypeRef.current})`);
-    }
-
-    // Default fallback if no speech was detected
-    if (!finalTranscript.trim()) {
-      finalTranscript =
-        'คุณหมอสั่งปรับเพิ่มขนาดยา Metformin เป็น 1000 มิลลิกรัม รับประทานครั้งละ 1 เม็ด เช้า-เย็น หลังอาหารทันที แล้วให้ทิ้งยา Metformin 500 มิลลิกรัม เม็ดสีขาวซองเก่าทันที ห้ามนำมารับประทานซ้ำ ส่วนยาลดความดัน Amlodipine 5 มิลลิกรัม ให้ปรับลดเหลือ 1 เม็ด ก่อนนอน นัดติดตามอาการคลินิกอายุรกรรมหัวใจ วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 9:00 น.';
+      transcriptSource = 'browser_preview_no_audio';
+      finalTranscript = typedText;
     }
 
     if (typeof window !== 'undefined') {
       localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
       localStorage.setItem('pvs_transcript_latest', finalTranscript);
+      localStorage.setItem(`pvs_transcript_source_${encounterId}`, transcriptSource);
     }
 
     router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
@@ -331,6 +330,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           <h1 className="text-2xl font-extrabold text-[#001E40] leading-snug">
             {isPaused ? 'หยุดบันทึกเสียงชั่วคราว...' : 'กำลังรับฟังเสียงคำแนะนำจากแพทย์...'}
           </h1>
+          {asrError && (
+            <div className="w-full rounded-xl border border-[#BA1A1A]/40 bg-[#FFF0F0] px-3 py-2 text-left text-xs font-bold text-[#8A0000]">
+              ⚠️ {asrError}
+            </div>
+          )}
         </div>
 
         {/* Central Recording Interaction — MAIN BUTTON IS STOP */}

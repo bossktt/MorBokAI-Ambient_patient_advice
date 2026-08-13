@@ -9,9 +9,10 @@
 
 ### 1. 🎙️ Multi-Tiered Speech-to-Text (ASR) Pipeline
 MorBok AI implements a failover speech recognition pipeline designed for high-accuracy Thai clinical speech:
-1. **Live Web Speech API (Client-side)**: Real-time Thai speech-to-text (`th-TH`) directly in the browser with auto-reconnection.
-2. **AssemblyAI Speech-to-Text API (Backend ASR)**: Multi-tier audio buffer transcription via `https://api.assemblyai.com/v2` with `language_code="th"`.
-3. **Synchronous Persistence Engine**: Guarantees raw transcript data integrity when transitioning between Screen 3 (Scribe) and Screen 4 (Review) via dual `localStorage` fallback keys.
+1. **Live Web Speech API (Client-side preview)**: Real-time Thai speech-to-text (`th-TH`) is shown only as a temporary preview.
+2. **Canonical backend ASR**: The completed recording is transcribed once through the configured provider tiers (OpenRouter, AssemblyAI, then Google STT).
+3. **Explicit failure handling**: No synthetic/demo transcript is returned when providers fail. The doctor must review or edit the transcript before it is sent to the clinical LLM.
+4. **Single-source persistence**: Screen 4 sends exactly one canonical transcript to the clinical LLM; competing browser/backend transcripts are never concatenated.
 
 ### 2. 🏥 Clinical LLM Adapters & Provider Routing
 MorBok AI supports pluggable LLM backends configured via `DEFAULT_LLM_PROVIDER`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER`:

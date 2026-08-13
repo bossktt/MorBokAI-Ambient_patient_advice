@@ -30,6 +30,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const selectedModel = searchParams.get('model') || 'google/gemini-2.5-flash';
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
+  const [transcriptSource, setTranscriptSource] = useState<string>('');
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -71,11 +72,16 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       const savedTranscript =
         localStorage.getItem(`pvs_transcript_${encounterId}`) ||
         localStorage.getItem('pvs_transcript_latest');
+      const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
+      setTranscriptSource(savedSource);
 
       if (savedTranscript) {
         setRawTranscript(savedTranscript);
 
-        // Trigger Clinical LLM Adapter (Gemini 2.5 Flash Lite ZDR)
+        // Only backend ASR or an explicit doctor edit is approved for LLM input.
+        // Browser preview text stays editable until the doctor confirms it.
+        if (savedSource !== 'backend_asr' && savedSource !== 'doctor_approved_edit') return;
+
         setIsGeneratingLLM(true);
         fetch(`${API_BASE}/api/v1/encounters/process-transcript`, {
           method: 'POST',
@@ -297,6 +303,40 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           <p className="text-xs text-[#43474F]">
             กรุณาตรวจสอบและแก้ไขความถูกต้องของคำแนะนำ ก่อนกดออกเอกสาร PDF ให้คนไข้
           </p>
+        </div>
+
+        {/* Canonical transcript: this exact text is the only input sent to the LLM. */}
+        <div className="bg-white border border-[#C3C6D1] rounded-2xl p-4 shadow-sm space-y-3 text-left">
+          <div className="flex items-center justify-between border-b border-[#C3C6D1]/60 pb-2.5">
+            <h2 className="font-bold text-sm text-[#001E40]">ต้นฉบับถอดเสียง (ตรวจสอบก่อนใช้ AI)</h2>
+            {transcriptSource !== 'backend_asr' && (
+              <span className="text-[10px] font-bold text-[#8A0000]">⚠️ ต้องตรวจสอบต้นฉบับ</span>
+            )}
+          </div>
+          <textarea
+            value={rawTranscript}
+            onChange={(e) => setRawTranscript(e.target.value)}
+            className="w-full rounded-xl border border-[#C3C6D1] bg-[#F0F3FF] p-3 text-xs leading-relaxed text-[#111C2C]"
+            rows={6}
+            placeholder="ไม่พบต้นฉบับถอดเสียง"
+          />
+          {transcriptSource !== 'backend_asr' && (
+            <p className="text-xs font-bold text-[#8A0000]">
+              ระบบยังไม่ส่งข้อความนี้ให้ AI จนกว่าแพทย์จะตรวจสอบและกดบันทึก
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem(`pvs_transcript_${encounterId}`, rawTranscript.trim());
+              localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'doctor_approved_edit');
+              window.location.reload();
+            }}
+            disabled={!rawTranscript.trim() || isGeneratingLLM}
+            className="rounded-xl bg-[#003366] px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
+          >
+            บันทึกต้นฉบับและสร้างสรุปใหม่
+          </button>
         </div>
 
 

@@ -37,7 +37,7 @@ import redis
 
 from app.core.config import settings
 from app.services.deid_engine import DeIdentificationEngine
-from app.services.llm_adapter import get_llm_adapter
+from app.services.llm_adapter import get_llm_adapter, ground_summary_to_transcript
 from app.services.asr_service import MultiTierASRService
 from app.services.pdf_service import PDFService
 from app.services.telemetry_service import TelemetryService, TELEMETRY_LOG_PATH
@@ -196,14 +196,11 @@ async def transcribe_audio(request: Request):
     """
     audio_bytes = await request.body()
     if not audio_bytes:
-        return {"status": "EMPTY", "transcript": ""}
+        return MultiTierASRService.transcribe_audio_result(b"").as_dict()
 
     mime_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
-    transcript = MultiTierASRService.transcribe_audio_bytes(audio_bytes, mime_type=mime_type)
-    return {
-        "status": "SUCCESS" if transcript else "EMPTY",
-        "transcript": transcript
-    }
+    result = MultiTierASRService.transcribe_audio_result(audio_bytes, mime_type=mime_type)
+    return result.as_dict()
 
 def count_summary_words(summary_data: dict) -> int:
     """Counts total words/tokens in clinical summary structure for accuracy tracking."""
@@ -244,12 +241,12 @@ def process_transcript(payload: dict):
     if not raw_transcript:
         return {
             "status": "EMPTY",
-            "diagnosis": "ไม่พบข้อมูลการถอดเสียง",
-            "instructions": ["กรุณาบันทึกเสียงบทสนทนาในห้องตรวจอีกครั้ง"],
+            "diagnosis": "",
+            "instructions": [],
             "startMeds": [],
             "stopMeds": [],
             "changeMeds": [],
-            "followUpDate": "ตามนัดหมายแพทย์",
+            "followUpDate": "",
             "llm_calculation_time_sec": 0.0,
             "llm_draft_word_count": 0
         }
@@ -260,6 +257,19 @@ def process_transcript(payload: dict):
         "license_no": doctor_info.get("license_no", "")
     }
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
+    if not DeIdentificationEngine.verify_zero_pii(sanitized_text, session_meta):
+        return {
+            "status": "REVIEW_REQUIRED",
+            "error": "พบข้อมูลส่วนบุคคลที่ยังไม่ถูกปกปิด จึงไม่ส่งข้อความไปยัง clinical LLM",
+            "diagnosis": "",
+            "instructions": [],
+            "startMeds": [],
+            "stopMeds": [],
+            "changeMeds": [],
+            "followUpDate": "",
+            "llm_calculation_time_sec": 0.0,
+            "llm_draft_word_count": 0,
+        }
 
     # 2. Process through LLM Adapter (Gemini 2.5 Flash Lite ZDR) with time measurement
     adapter = get_llm_adapter()
@@ -267,8 +277,9 @@ def process_transcript(payload: dict):
     raw_summary = adapter.generate_clinical_summary(sanitized_text)
     llm_calc_time_sec = round(time.time() - t_start, 2)
 
-    # 3. Rehydrate summary
-    rehydrated = DeIdentificationEngine.rehydrate_summary(raw_summary, meta)
+    # 3. Enforce source evidence before rehydrating any local metadata.
+    grounded_summary = ground_summary_to_transcript(raw_summary, sanitized_text)
+    rehydrated = DeIdentificationEngine.rehydrate_summary(grounded_summary, meta)
 
     patient_view = rehydrated.get("patient_view", {})
     medication_box = rehydrated.get("medication_box", {})
@@ -277,37 +288,41 @@ def process_transcript(payload: dict):
     invalid_keywords = ["ไม่ระบุ", "ไม่มี", "ไม่พบข้อมูล", "ไม่พบคำวินิจฉัย", "ไม่พบข้อวินิจฉัย", "ไม่ระบุข้อวินิจฉัย", "ไม่พบการวินิจฉัย", "no diagnosis", "not specified"]
     is_invalid_diag = not raw_diag or raw_diag.lower() in ["-", "n/a"] or any(kw in raw_diag.lower() for kw in invalid_keywords)
     diagnosis = "" if is_invalid_diag else raw_diag
-    instructions = patient_view.get("key_instructions") or [
-        "รับประทานยาตามที่เภสัชกรแนะนำให้ครบถ้วน",
-        "หากมีไข้สูงติดต่อกันเกิน 3 วัน ให้กลับมาพบแพทย์เพื่อตรวจเลือดเพิ่มเติม",
-        "พักผ่อนให้เพียงพอและดื่มน้ำสะอาดวันละ 8 แก้ว"
-    ]
+    # Never fill missing clinical facts with generic advice. Missing means the
+    # transcript did not support that fact and the doctor must review it.
+    instructions = patient_view.get("key_instructions") or []
 
     start_meds = []
     for m in medication_box.get("start", []):
+        if not isinstance(m, dict) or not (m.get("name") or "").strip():
+            continue
         start_meds.append({
-            "name": m.get("name", "ยาใหม่"),
-            "desc": m.get("appearance", "ลักษณะยา"),
+            "name": m.get("name", ""),
+            "desc": m.get("appearance", ""),
             "usage": m.get("how_to_take", "")
         })
 
     stop_meds = []
     for m in medication_box.get("stop", []):
+        if not isinstance(m, dict) or not (m.get("name") or "").strip():
+            continue
         stop_meds.append({
-            "name": m.get("name", "ยาที่ต้องหยุด"),
-            "desc": m.get("appearance", "ซองเดิม"),
-            "warning": f"⚠️ {m.get('action', 'หยุดรับประทานทันที')} ({m.get('reason', '')})"
+            "name": m.get("name", ""),
+            "desc": m.get("appearance", ""),
+            "warning": f"⚠️ {m.get('action', '')} ({m.get('reason', '')})"
         })
 
     change_meds = []
     for m in medication_box.get("change", []):
+        if not isinstance(m, dict) or not (m.get("name") or "").strip():
+            continue
         change_meds.append({
-            "name": m.get("name", "ยาที่ปรับขนาด"),
-            "desc": m.get("appearance", "ลักษณะยา"),
+            "name": m.get("name", ""),
+            "desc": m.get("appearance", ""),
             "change": m.get("new_instruction", "")
         })
 
-    follow_up = patient_view.get("follow_up", {}).get("date") or patient_view.get("follow_up", {}).get("follow_up_date_thai") or "ตามนัดหมายแพทย์ (หากมีอาการไข้สูงเกิน 3 วัน ให้กลับมาตรวจเพิ่มเติม)"
+    follow_up = patient_view.get("follow_up", {}).get("date") or patient_view.get("follow_up", {}).get("follow_up_date_thai") or ""
 
     draft_summary_dict = {
         "diagnosis": diagnosis,
@@ -320,7 +335,8 @@ def process_transcript(payload: dict):
     llm_draft_words = count_summary_words(draft_summary_dict)
 
     response_payload = {
-        "status": "SUCCESS",
+        "status": "SUCCESS" if any([diagnosis, instructions, start_meds, stop_meds, change_meds, follow_up]) else "REVIEW_REQUIRED",
+        "canonical_transcript": raw_transcript,
         "diagnosis": diagnosis,
         "instructions": instructions,
         "startMeds": start_meds,
@@ -541,33 +557,18 @@ def download_pdf(pdf_id: str):
 
 @app.websocket("/ws/audio-stream/{encounter_id}")
 async def audio_stream_endpoint(websocket: WebSocket, encounter_id: str):
+    """Consume live chunks for connection health only.
+
+    Final ASR is performed exactly once by ``POST /transcribe-audio`` after the
+    recorder stops. Processing on WebSocket disconnect used to create a second,
+    different transcript and LLM draft.
+    """
     await websocket.accept()
-    audio_buffer = bytearray()
 
     try:
         while True:
-            # Receive Opus binary audio chunk into volatile RAM
-            data = await websocket.receive_bytes()
-            audio_buffer.extend(data)
+            await websocket.receive_bytes()
     except WebSocketDisconnect:
-        # Transcribe audio buffer using Typhoon ASR Realtime model
-        raw_speech = MultiTierASRService.transcribe_audio_bytes(bytes(audio_buffer))
-
-        session_meta = {
-            "patient_name": "ผู้ป่วย",
-            "caregiver_name": "ผู้ดูแล",
-            "doctor_name": "แพทย์",
-            "hn": "HN-DEID",
-            "phone_number": "000"
-        }
-
-        sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_speech, session_meta)
-        is_safe = DeIdentificationEngine.verify_zero_pii(sanitized_text, session_meta)
-
-        if is_safe:
-            adapter = get_llm_adapter()
-            summary_draft = adapter.generate_clinical_summary(sanitized_text)
-            final_draft = DeIdentificationEngine.rehydrate_summary(summary_draft, meta)
-
-            cache_set(f"draft_summary:{encounter_id}", json.dumps(final_draft))
-            cache_set(f"encounter:{encounter_id}:status", "REVIEW")
+        # The browser uploads the complete recording through the REST endpoint.
+        # Do not infer a clinical result from a socket lifecycle event.
+        return

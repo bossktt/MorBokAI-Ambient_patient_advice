@@ -43,9 +43,12 @@ class TestStages1To3(unittest.TestCase):
         mock_audio_bytes = b"\x00\x01\x02\x03" * 100
 
         # Test Multi-Tier ASR Engine
-        transcribed_text = MultiTierASRService.transcribe_audio_bytes(mock_audio_bytes)
-        self.assertIsInstance(transcribed_text, str)
-        self.assertGreater(len(transcribed_text), 0)
+        asr_result = MultiTierASRService.transcribe_audio_result(mock_audio_bytes)
+        self.assertIn(asr_result.status, {"SUCCESS", "FAILED", "EMPTY"})
+        # A provider failure is an explicit empty result, never synthetic text.
+        if asr_result.status != "SUCCESS":
+            self.assertEqual(asr_result.transcript, "")
+        transcribed_text = asr_result.transcript
 
         # Test De-Identification Engine
         session_meta = {
