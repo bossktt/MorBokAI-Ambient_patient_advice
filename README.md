@@ -19,6 +19,11 @@ minimum transcript length, speech-character ratio, placeholder/noise output, rep
 tokens, and provider confidence when available. Results expose `asr_quality.status`,
 `score`, and `reasons`; `REJECT` returns `CANNOT_EXTRACT_SAFELY` with empty clinical
 fields and the LLM is not called.
+Quality grades are `0–0.35` = ระบบเสียงไม่ชัดพอ, `0.36–0.65` = ระบบเสียงอยู่ระดับปานกลาง,
+and `>0.65` = ระบบเสียงดี. Only the last grade is allowed into the clinical LLM.
+The primary OpenRouter ASR model is `qwen/qwen3-asr-1.7b`, with configured fallbacks.
+Each check is also recorded as an `ASR_QUALITY_EVALUATED` event in the encounter log,
+including `asr_quality.status`, `score`, `reasons`, and `threshold`.
 
 ### 2. 🏥 Clinical LLM Adapters & Provider Routing
 MorBok AI supports pluggable LLM backends configured via `DEFAULT_LLM_PROVIDER`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER`:

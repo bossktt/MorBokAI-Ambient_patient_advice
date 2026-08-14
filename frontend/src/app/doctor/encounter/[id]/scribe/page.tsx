@@ -237,7 +237,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         setDebugInfo((d) => `${d}\n⬆️ uploading ${chunks.length} chunks to ${API_BASE} (${mimeTypeRef.current})`);
         const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
           method: 'POST',
-          headers: { 'Content-Type': mimeTypeRef.current },
+          headers: {
+            'Content-Type': mimeTypeRef.current,
+            'X-Encounter-Id': encounterId,
+          },
           body: blob,
         });
         if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
@@ -254,7 +257,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           asrStatus = 'QUALITY_FAILED';
           finalTranscript = data.transcript.trim();
           asrProvider = data.provider || 'backend';
-          asrErrorMessage = `คุณภาพ ASR ไม่ผ่าน (${data.quality?.score ?? 'ไม่มีคะแนน'}) กรุณาตรวจแก้ต้นฉบับก่อนสร้างสรุป`;
+          const gradeLabel = data.quality?.grade_label || 'ระบบเสียงยังไม่ผ่านเกณฑ์';
+          asrErrorMessage = data.quality?.score !== undefined
+            ? `${gradeLabel} (คะแนน ${data.quality.score} จากเกณฑ์ 0.65) จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
+            : `${gradeLabel} จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`;
           setAsrError(asrErrorMessage);
         } else {
           transcriptSource = 'browser_preview_after_asr_failure';

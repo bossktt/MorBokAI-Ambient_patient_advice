@@ -31,10 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
-  const [clinicalStatus, setClinicalStatus] = useState<string>('NOT_STARTED');
-  const [clinicalMessage, setClinicalMessage] = useState<string>('');
-  const [summaryCache, setSummaryCache] = useState<{ status: string; input_fingerprint?: string }>({ status: 'NOT_STARTED' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -52,6 +49,14 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
   const [followUpDate, setFollowUpDate] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
+
+  const asrStatusText = asrResult.status === 'SUCCESS'
+    ? 'ถอดเสียงเรียบร้อย'
+    : asrResult.status === 'QUALITY_FAILED'
+      ? 'เสียงไม่ชัดพอ ต้องตรวจสอบข้อความ'
+      : asrResult.status === 'NO_AUDIO'
+        ? 'ไม่พบไฟล์เสียง'
+        : 'ต้องตรวจสอบการถอดเสียง';
 
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState(false);
@@ -79,7 +84,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
       setTranscriptSource(savedSource);
       const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
-      let parsedAsrResult: { status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; reasons?: string[] } | null } | null = null;
+      let parsedAsrResult: { status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null } | null = null;
       if (savedAsrResult) {
         try {
           parsedAsrResult = JSON.parse(savedAsrResult);
@@ -107,9 +112,6 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         })
           .then((res) => res.json())
           .then((data) => {
-            setClinicalStatus(data.clinical_extraction_status || data.status || 'UNKNOWN');
-            setClinicalMessage(data.message || data.error || '');
-            setSummaryCache(data.summary_cache || { status: 'NOT_CACHED' });
             if (data.asr_quality) {
               setAsrResult((previous) => ({ ...previous, quality: data.asr_quality }));
             }
@@ -326,17 +328,11 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
         <div className="grid grid-cols-1 gap-2 text-xs font-bold">
           <div className={`rounded-xl border px-3 py-2 ${asrResult.status === 'SUCCESS' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
-            ASR_STATUS: {asrResult.status}{asrResult.provider ? ` · ${asrResult.provider}` : ''}
-            {asrResult.quality?.score !== undefined ? ` · quality ${asrResult.quality.score}` : ''}
+            สถานะการถอดเสียง: {asrStatusText}{asrResult.provider ? ' · จากระบบถอดเสียง' : ''}
+            {asrResult.quality?.grade_label ? ` · ${asrResult.quality.grade_label}` : ''}
+            {asrResult.quality?.score !== undefined ? ` · คะแนนคุณภาพ ${asrResult.quality.score} จากเกณฑ์ ${asrResult.quality.threshold ?? 0.65}` : ''}
+            {(asrResult.status === 'QUALITY_FAILED' || asrResult.quality?.status === 'REJECT') && ' · ยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง'}
             {asrResult.error ? ` · ${asrResult.error}` : ''}
-          </div>
-          <div className={`rounded-xl border px-3 py-2 ${clinicalStatus === 'GROUNDED' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
-            CLINICAL_EXTRACTION_STATUS: {clinicalStatus}
-            {clinicalMessage ? ` · ${clinicalMessage}` : ''}
-          </div>
-          <div className={`rounded-xl border px-3 py-2 ${summaryCache.status === 'HIT' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#C3C6D1] bg-white text-[#43474F]'}`}>
-            SUMMARY_CONSISTENCY_CACHE: {summaryCache.status}
-            {summaryCache.status === 'HIT' ? ' · same approved transcript, same saved summary' : ''}
           </div>
         </div>
 

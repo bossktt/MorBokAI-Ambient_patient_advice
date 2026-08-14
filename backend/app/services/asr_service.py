@@ -76,22 +76,43 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
     if repeated_tokens:
         reasons.append("repeated_tokens")
 
-    score = 1.0
-    score -= 0.35 if hard_fail else 0.0
-    score -= 0.15 if repeated_tokens else 0.0
+    if not text:
+        score = 0.0
+    elif hard_fail:
+        # A hard quality failure belongs in the lowest grade even when a
+        # provider happens to report a high confidence value.
+        score = 0.35
+    else:
+        score = 1.0
+        score -= 0.15 if repeated_tokens else 0.0
     if confidence is not None:
-        score = (score * 0.5) + (max(0.0, min(1.0, confidence)) * 0.5)
+        confidence = max(0.0, min(1.0, confidence))
+        score = score if hard_fail else (score * 0.5) + (confidence * 0.5)
         if confidence < settings.ASR_QUALITY_MIN_CONFIDENCE:
             reasons.append("provider_confidence_below_threshold")
             hard_fail = True
 
     score = round(max(0.0, min(1.0, score)), 3)
-    status = "REJECT" if hard_fail or score < settings.ASR_QUALITY_MIN_SCORE else "ACCEPT"
+    if score <= 0.35:
+        grade = "POOR"
+        grade_label = "ระบบเสียงไม่ชัดพอ"
+    elif score <= 0.65:
+        grade = "MEDIUM"
+        grade_label = "ระบบเสียงอยู่ระดับปานกลาง"
+    else:
+        grade = "GOOD"
+        grade_label = "ระบบเสียงดี"
+
+    # Only GOOD (> 0.65) is safe to send to the clinical LLM. A score of
+    # exactly 0.65 remains MEDIUM by the requested grading bands.
+    status = "ACCEPT" if not hard_fail and grade == "GOOD" else "REJECT"
     if status == "REJECT" and not reasons:
         reasons.append("quality_score_below_threshold")
     return {
         "status": status,
         "score": score,
+        "grade": grade,
+        "grade_label": grade_label,
         "confidence": confidence,
         "reasons": reasons,
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
@@ -243,10 +264,12 @@ class MultiTierASRService:
         openrouter_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
             openrouter_models = [
+                getattr(settings, "OPENROUTER_ASR_MODEL", "qwen/qwen3-asr-1.7b"),
                 "openai/whisper-large-v3-turbo",
                 "fish-audio/transcribe-1",
                 "nvidia/parakeet-tdt-0.6b-v3"
             ]
+            openrouter_models = list(dict.fromkeys(openrouter_models))
             for model_name in openrouter_models:
                 try:
                     response = requests.post(

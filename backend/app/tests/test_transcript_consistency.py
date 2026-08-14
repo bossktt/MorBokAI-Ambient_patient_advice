@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
-from app.services.asr_service import MultiTierASRService, assess_transcript_quality
+from app.services.asr_service import ASRResult, MultiTierASRService, assess_transcript_quality
 from app.services.llm_adapter import ground_summary_to_transcript
 
 
@@ -16,13 +16,18 @@ class TestTranscriptConsistency(unittest.TestCase):
     def test_asr_quality_gate_accepts_clinical_text_and_rejects_noise(self):
         accepted = assess_transcript_quality("แพทย์บอกให้พักผ่อนที่บ้าน")
         rejected = assess_transcript_quality("!!!! ????? ....")
+        medium = assess_transcript_quality("แพทย์บอกให้พักผ่อนที่บ้าน", confidence=0.3)
         self.assertEqual(accepted["status"], "ACCEPT")
+        self.assertEqual(accepted["grade"], "GOOD")
         self.assertGreaterEqual(accepted["score"], settings.ASR_QUALITY_MIN_SCORE)
         self.assertEqual(rejected["status"], "REJECT")
+        self.assertEqual(rejected["grade"], "POOR")
         self.assertIn("too_much_non_speech_noise", rejected["reasons"])
+        self.assertEqual(medium["grade"], "MEDIUM")
+        self.assertEqual(medium["status"], "REJECT")
 
     def test_low_asr_quality_blocks_llm_call(self):
-        with patch("app.main.get_llm_adapter") as get_adapter:
+        with patch("app.main.get_llm_adapter") as get_adapter, patch("app.main.append_encounter_log"):
             response = client.post(
                 "/api/v1/encounters/process-transcript",
                 json={"encounter_id": "ENC_LOW_ASR", "raw_transcript": "!!!! ????? ...."},
@@ -32,6 +37,30 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(data["status"], "CANNOT_EXTRACT_SAFELY")
         self.assertEqual(data["asr_quality"]["status"], "REJECT")
         get_adapter.assert_not_called()
+
+    def test_asr_quality_result_is_written_to_encounter_log(self):
+        quality = assess_transcript_quality("!!!! ????? ....")
+        fake_result = ASRResult(
+            transcript="!!!! ????? ....",
+            status="SUCCESS",
+            provider="test",
+            model="test-model",
+            quality=quality,
+        )
+        with patch("app.main.MultiTierASRService.transcribe_audio_result", return_value=fake_result), patch("app.main.append_encounter_log") as append_log:
+            response = client.post(
+                "/api/v1/encounters/transcribe-audio",
+                headers={"X-Encounter-Id": "ENC_ASR_LOG"},
+                content=b"audio-bytes",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        logged = append_log.call_args.args[0]
+        self.assertEqual(logged["event"], "ASR_QUALITY_EVALUATED")
+        self.assertEqual(logged["encounter_id"], "ENC_ASR_LOG")
+        self.assertEqual(logged["asr_quality"]["status"], "REJECT")
+        self.assertEqual(logged["asr_result"]["quality"]["status"], "REJECT")
+        self.assertEqual(logged["asr_result"]["quality"]["score"], quality["score"])
 
     def test_asr_failure_never_returns_demo_transcript(self):
         with patch.object(settings, "OPENROUTER_API_KEY", None), patch.object(settings, "ASSEMBLYAI_API_KEY", None), patch.object(settings, "GCP_KEY_PATH", "/tmp/does-not-exist-gcp-key.json"):

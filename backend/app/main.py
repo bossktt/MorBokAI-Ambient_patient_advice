@@ -212,12 +212,30 @@ async def transcribe_audio(request: Request):
     the transcribed Thai text via the multi-tier ASR pipeline.
     """
     audio_bytes = await request.body()
+    encounter_id = request.headers.get("x-encounter-id", "UNKNOWN")
     if not audio_bytes:
-        return MultiTierASRService.transcribe_audio_result(b"").as_dict()
+        result = MultiTierASRService.transcribe_audio_result(b"")
+        asr_payload = result.as_dict()
+        append_encounter_log({
+            "event": "ASR_QUALITY_EVALUATED",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
+            "encounter_id": encounter_id,
+            "asr_quality": asr_payload.get("quality"),
+            "asr_result": asr_payload,
+        })
+        return asr_payload
 
     mime_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip()
     result = MultiTierASRService.transcribe_audio_result(audio_bytes, mime_type=mime_type)
-    return result.as_dict()
+    asr_payload = result.as_dict()
+    append_encounter_log({
+        "event": "ASR_QUALITY_EVALUATED",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
+        "encounter_id": encounter_id,
+        "asr_quality": asr_payload.get("quality"),
+        "asr_result": asr_payload,
+    })
+    return asr_payload
 
 def count_summary_words(summary_data: dict) -> int:
     """Counts total words/tokens in clinical summary structure for accuracy tracking."""
@@ -279,10 +297,20 @@ def process_transcript(payload: dict):
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
     asr_quality = assess_transcript_quality(raw_transcript, payload.get("asr_confidence"))
     if asr_quality["status"] != "ACCEPT":
+        quality_message = {
+            "POOR": "ระบบเสียงไม่ชัดพอ",
+            "MEDIUM": "ระบบเสียงอยู่ระดับปานกลาง",
+        }.get(asr_quality.get("grade"), "ระบบเสียงยังไม่ผ่านเกณฑ์")
+        append_encounter_log({
+            "event": "ASR_QUALITY_GATE_REJECTED",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
+            "encounter_id": encounter_id,
+            "asr_quality": asr_quality,
+        })
         return {
             "status": "CANNOT_EXTRACT_SAFELY",
             "clinical_extraction_status": "CANNOT_EXTRACT_SAFELY",
-            "message": "ASR คุณภาพต่ำ จึงไม่ส่งข้อความไปยัง clinical LLM กรุณาบันทึกเสียงใหม่หรือตรวจแก้ต้นฉบับ",
+            "message": f"{quality_message} จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาบันทึกเสียงใหม่หรือตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด",
             "canonical_transcript": raw_transcript,
             "asr_quality": asr_quality,
             "diagnosis": "",
@@ -431,6 +459,7 @@ def process_transcript(payload: dict):
         },
         "raw_transcript": raw_transcript,
         "sanitized_transcript": sanitized_text,
+        "asr_quality": asr_quality,
         "deid_metadata": meta,
         "clinical_summary": response_payload
     }

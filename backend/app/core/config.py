@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Repeatable clinical extraction. Temperature reduces variation, while the
     # server-side content-addressed cache is the hard consistency guarantee.
-    SUMMARY_GENERATION_TEMPERATURE: float = 0.0
+    SUMMARY_GENERATION_TEMPERATURE: float = 0.1
     SUMMARY_GENERATION_SEED: int = 42
     SUMMARY_PROMPT_VERSION: str = "grounded-clinical-summary-v1"
 
@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     ASR_QUALITY_MIN_SCORE: float = 0.65
     ASR_QUALITY_MIN_CONFIDENCE: float = 0.55
     ASR_QUALITY_MIN_CHARS: int = 10
+    OPENROUTER_ASR_MODEL: str = "qwen/qwen3-asr-1.7b"
 
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
