@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { API_BASE, WS_BASE } from '@/lib/api';
+import { API_BASE, WS_BASE, deduplicateRepeatedSentences } from '@/lib/api';
 
 export default function AmbientScribePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -214,90 +214,87 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (e) {}
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch (e) {}
+    const mediaRecorder = mediaRecorderRef.current;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      // MediaRecorder emits the final dataavailable event immediately before
+      // stop. Waiting here prevents uploading an incomplete recording.
+      await new Promise<void>((resolve) => {
+        const onStop = () => resolve();
+        mediaRecorder.addEventListener('stop', onStop, { once: true });
+        try {
+          mediaRecorder.stop();
+        } catch (e) {
+          resolve();
+        }
+      });
     }
 
-    const typedText = transcript.trim();
-
-    // Browser speech is preview only. The completed recording is the canonical
-    // source whenever it is available; never concatenate two competing ASRs.
-    let finalTranscript = '';
-    let transcriptSource = 'backend_asr';
-    let asrStatus = 'FAILED';
-    let asrProvider: string | null = null;
-    let asrErrorMessage = '';
-    let asrQuality: Record<string, unknown> | null = null;
-
-    // Transcribe recorded audio via backend ASR if chunks exist
+    const typedText = deduplicateRepeatedSentences(transcript.trim());
     const chunks = chunksRef.current;
-    if (chunks.length > 0) {
+    const audioBlob = chunks.length > 0 ? new Blob(chunks, { type: mimeTypeRef.current }) : null;
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`pvs_transcript_${encounterId}`, typedText);
+      localStorage.setItem('pvs_transcript_latest', typedText);
+      localStorage.setItem(`pvs_transcript_source_${encounterId}`, audioBlob ? 'backend_asr_pending' : 'browser_preview_no_audio');
+      localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+        status: audioBlob ? 'PROCESSING' : 'NO_AUDIO',
+        provider: null,
+        model: null,
+        error: audioBlob ? null : 'ไม่พบไฟล์เสียงจากเครื่องบันทึก',
+        quality: null,
+      }));
+    }
+
+    // Move to Screen 4 now. ASR continues in the background and Screen 4
+    // starts clinical analysis as soon as the canonical result is available.
+    router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
+    if (!audioBlob) return;
+
+    void (async () => {
       try {
-        const blob = new Blob(chunks, { type: mimeTypeRef.current });
-        setDebugInfo((d) => `${d}\n⬆️ uploading ${chunks.length} chunks to ${API_BASE} (${mimeTypeRef.current})`);
         const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
           method: 'POST',
           headers: {
             'Content-Type': mimeTypeRef.current,
             'X-Encounter-Id': encounterId,
           },
-          body: blob,
+          body: audioBlob,
         });
         if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
         const data = await res.json();
-        asrQuality = data.quality || null;
-        setDebugInfo((d) => `${d}\n⬇️ ASR response: ${JSON.stringify(data).slice(0, 120)}`);
-        if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim() && data.quality?.status === 'ACCEPT') {
-          finalTranscript = data.transcript.trim();
-          asrStatus = 'SUCCESS';
-          asrProvider = data.provider || 'backend';
-          setAsrError('');
-        } else if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim()) {
-          transcriptSource = 'backend_asr_quality_failed';
-          asrStatus = 'QUALITY_FAILED';
-          finalTranscript = data.transcript.trim();
-          asrProvider = data.provider || 'backend';
-          const gradeLabel = data.quality?.grade_label || 'ระบบเสียงยังไม่ผ่านเกณฑ์';
-          asrErrorMessage = data.quality?.score !== undefined
-            ? `${gradeLabel} (คะแนน ${data.quality.score} จากเกณฑ์ 0.65) จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
-            : `${gradeLabel} จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`;
-          setAsrError(asrErrorMessage);
-        } else {
-          transcriptSource = 'browser_preview_after_asr_failure';
-          finalTranscript = typedText;
-          asrErrorMessage = data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
-          setAsrError(asrErrorMessage);
-        }
+        const hasTranscript = data.status === 'SUCCESS' && data.transcript && data.transcript.trim();
+        const accepted = hasTranscript && data.quality?.status === 'ACCEPT';
+        const finalTranscript = hasTranscript
+          ? deduplicateRepeatedSentences(data.transcript.trim())
+          : typedText;
+        const error = accepted
+          ? null
+          : data.quality?.grade_label
+            ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
+            : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+        localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
+        localStorage.setItem('pvs_transcript_latest', finalTranscript);
+        localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
+        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+          status: accepted ? 'SUCCESS' : (hasTranscript ? 'QUALITY_FAILED' : 'FAILED'),
+          provider: data.provider || null,
+          model: data.model || null,
+          error,
+          quality: data.quality || null,
+        }));
       } catch (e) {
         console.warn('Backend transcription failed:', e);
-        const errMsg = e instanceof Error ? e.message : String(e);
-        setDebugInfo((d) => `${d}\n❌ upload/ASR failed: ${errMsg}`);
-        asrErrorMessage = 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
-        setAsrError(asrErrorMessage);
-        transcriptSource = 'browser_preview_after_asr_failure';
-        finalTranscript = typedText;
+        localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'browser_preview_after_asr_failure');
+        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+          status: 'FAILED',
+          provider: null,
+          model: null,
+          error: 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป',
+          quality: null,
+        }));
       }
-    } else {
-      setDebugInfo((d) => `${d}\n⚠️ no chunks recorded (${mimeTypeRef.current})`);
-      asrStatus = 'NO_AUDIO';
-      asrErrorMessage = 'ไม่พบไฟล์เสียงจากเครื่องบันทึก';
-      transcriptSource = 'browser_preview_no_audio';
-      finalTranscript = typedText;
-    }
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
-      localStorage.setItem('pvs_transcript_latest', finalTranscript);
-      localStorage.setItem(`pvs_transcript_source_${encounterId}`, transcriptSource);
-      localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
-        status: asrStatus,
-        provider: asrProvider,
-        error: asrErrorMessage || null,
-        quality: asrQuality,
-      }));
-    }
-
-    router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
+    })();
   };
 
   return (

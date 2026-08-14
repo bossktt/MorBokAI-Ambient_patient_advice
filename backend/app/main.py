@@ -39,7 +39,7 @@ import redis
 from app.core.config import settings
 from app.services.deid_engine import DeIdentificationEngine
 from app.services.llm_adapter import get_llm_adapter, ground_summary_to_transcript
-from app.services.asr_service import MultiTierASRService, assess_transcript_quality
+from app.services.asr_service import MultiTierASRService, assess_transcript_quality, deduplicate_repeated_sentences
 from app.services.pdf_service import PDFService
 from app.services.telemetry_service import TelemetryService, TELEMETRY_LOG_PATH
 
@@ -269,7 +269,7 @@ def process_transcript(payload: dict):
     Screen 3 -> Screen 4: Processes raw speech transcript through De-ID & LLM Adapter,
     returning structured clinical summary (diagnosis, instructions, startMeds, stopMeds, changeMeds, followUpDate).
     """
-    raw_transcript = payload.get("raw_transcript", "").strip()
+    raw_transcript = deduplicate_repeated_sentences(payload.get("raw_transcript", ""))
     doctor_info = payload.get("doctor_info", {})
     encounter_id = payload.get("encounter_id", f"ENC_{uuid.uuid4().hex[:8].upper()}")
 

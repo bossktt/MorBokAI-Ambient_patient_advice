@@ -38,13 +38,55 @@ class ASRResult:
         }
 
 
+def deduplicate_repeated_sentences(transcript: str) -> str:
+    """Keep one copy when an ASR provider repeats an adjacent sentence/phrase."""
+    text = re.sub(r"\s+", " ", (transcript or "")).strip()
+    if not text:
+        return ""
+
+    chunks = [
+        chunk.strip()
+        for chunk in re.split(r"(?<=[.!?。！？])\s*", text)
+        if chunk.strip()
+    ]
+    unique_chunks = []
+    previous_key = None
+    for chunk in chunks:
+        key = re.sub(r"[^\wก-๛]+", "", chunk.casefold())
+        if key and key == previous_key:
+            continue
+        unique_chunks.append(chunk)
+        previous_key = key
+    text = " ".join(unique_chunks)
+
+    # Thai ASR output often has no punctuation. Remove adjacent duplicated
+    # token runs while retaining the first occurrence.
+    tokens = text.split()
+    result = []
+    index = 0
+    while index < len(tokens):
+        max_block = min((len(tokens) - index) // 2, 80)
+        duplicate_size = 0
+        for size in range(max_block, 1, -1):
+            if tokens[index:index + size] == tokens[index + size:index + (size * 2)]:
+                duplicate_size = size
+                break
+        if duplicate_size:
+            result.extend(tokens[index:index + duplicate_size])
+            index += duplicate_size * 2
+        else:
+            result.append(tokens[index])
+            index += 1
+    return " ".join(result)
+
+
 def assess_transcript_quality(transcript: str, confidence: Optional[float] = None) -> dict:
     """Assess whether ASR text is safe to send to clinical extraction.
 
     This is a conservative pre-LLM gate, not a claim of word-level ASR accuracy.
     A golden-set evaluation remains necessary to calibrate the thresholds.
     """
-    text = (transcript or "").strip()
+    text = deduplicate_repeated_sentences(transcript)
     try:
         confidence = float(confidence) if confidence is not None else None
     except (TypeError, ValueError):
@@ -161,7 +203,7 @@ def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
 class MultiTierASRService:
     """
     Multi-Tiered Speech-to-Text Pipeline:
-    - Step 1 (Primary): OpenRouter ASR (openai/whisper-large-v3-turbo -> fish-audio/transcribe-1 -> nvidia/parakeet-tdt-0.6b-v3)
+    - Step 1 (Primary): OpenRouter ASR (openai/gpt-transcribe)
     - Step 2 (Secondary): AssemblyAI ASR (https://api.assemblyai.com/v2)
     - Step 3 (Tertiary): Google Speech-to-Text (via gcp-key.json credentials)
     - No synthetic transcript fallback; failures are surfaced to the doctor.
@@ -210,18 +252,19 @@ class MultiTierASRService:
                 return None
 
             # 3. Poll transcript status
-            for _ in range(12):
-                time.sleep(1.5)
+            for attempt in range(10):
+                if attempt:
+                    time.sleep(0.75)
                 poll_res = requests.get(
                     f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
                     headers=headers,
-                    timeout=10
+                    timeout=5
                 )
                 if poll_res.status_code == 200:
                     data = poll_res.json()
                     status = data.get("status")
                     if status == "completed":
-                        text = data.get("text", "").strip()
+                        text = deduplicate_repeated_sentences(data.get("text", ""))
                         if text:
                             logger.info("AssemblyAI ASR succeeded.")
                             return text
@@ -264,7 +307,7 @@ class MultiTierASRService:
         openrouter_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
             openrouter_models = [
-                getattr(settings, "OPENROUTER_ASR_MODEL", "qwen/qwen3-asr-1.7b"),
+                getattr(settings, "OPENROUTER_ASR_MODEL", "openai/gpt-transcribe"),
                 "openai/whisper-large-v3-turbo",
                 "fish-audio/transcribe-1",
                 "nvidia/parakeet-tdt-0.6b-v3"
@@ -281,7 +324,7 @@ class MultiTierASRService:
                     )
                     if response.status_code == 200:
                         response_data = response.json()
-                        text = response_data.get("text", "").strip()
+                        text = deduplicate_repeated_sentences(response_data.get("text", ""))
                         if text:
                             provider_confidence = response_data.get("confidence")
                             quality = assess_transcript_quality(text, provider_confidence)
@@ -354,7 +397,7 @@ class MultiTierASRService:
                         if getattr(result.alternatives[0], "confidence", None) is not None:
                             confidence_values.append(result.alternatives[0].confidence)
 
-                final_text = " ".join(results_text).strip()
+                final_text = deduplicate_repeated_sentences(" ".join(results_text))
                 if final_text:
                     provider_confidence = (sum(confidence_values) / len(confidence_values)) if confidence_values else None
                     logger.info("Step 3 (Google Speech-to-Text via gcp-key.json) succeeded.")

@@ -17,7 +17,7 @@
 
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { API_BASE } from '@/lib/api';
 
@@ -31,7 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -52,6 +52,8 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
   const asrStatusText = asrResult.status === 'SUCCESS'
     ? 'ถอดเสียงเรียบร้อย'
+    : asrResult.status === 'PROCESSING'
+      ? 'กำลังถอดเสียงจากไฟล์บันทึก'
     : asrResult.status === 'QUALITY_FAILED'
       ? 'เสียงไม่ชัดพอ ต้องตรวจสอบข้อความ'
       : asrResult.status === 'NO_AUDIO'
@@ -61,10 +63,13 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const processedTranscriptRef = useRef<string | null>(null);
 
   // Read recorded transcript & Doctor Info, then process through Clinical LLM Adapter
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      let disposed = false;
+      let pollTimer: ReturnType<typeof setInterval> | undefined;
       // Telemetry: Record Screen 4 load timestamp for time-to-sign-off calculation
       localStorage.setItem(`morbok_telemetry_${encounterId}_screen4_loaded_at`, String(Date.now()));
       localStorage.setItem(`morbok_telemetry_${encounterId}_edit_count`, '0');
@@ -78,28 +83,45 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         } catch (e) { }
       }
 
-      const savedTranscript =
-        localStorage.getItem(`pvs_transcript_${encounterId}`) ||
-        localStorage.getItem('pvs_transcript_latest');
-      const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
-      setTranscriptSource(savedSource);
-      const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
-      let parsedAsrResult: { status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null } | null = null;
-      if (savedAsrResult) {
-        try {
-          parsedAsrResult = JSON.parse(savedAsrResult);
-          setAsrResult(parsedAsrResult || { status: 'UNKNOWN' });
-        } catch (e) { setAsrResult({ status: 'UNKNOWN' }); }
-      }
+      const loadTranscriptState = () => {
+        const savedTranscript =
+          localStorage.getItem(`pvs_transcript_${encounterId}`) ||
+          localStorage.getItem('pvs_transcript_latest');
+        const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
+        setTranscriptSource(savedSource);
+        if (savedTranscript !== null) setRawTranscript(savedTranscript);
+        if (savedSource !== 'backend_asr_pending' && pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = undefined;
+        }
 
-      if (savedTranscript) {
-        setRawTranscript(savedTranscript);
+        const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
+        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null } | null = null;
+        if (savedAsrResult) {
+          try {
+            parsedAsrResult = JSON.parse(savedAsrResult);
+            setAsrResult(parsedAsrResult || { status: 'UNKNOWN' });
+          } catch (e) {
+            setAsrResult({ status: 'UNKNOWN' });
+          }
+        }
+
+        if (!savedTranscript || savedSource === 'backend_asr_pending') {
+          if (savedSource === 'backend_asr_pending') setIsGeneratingLLM(true);
+          return;
+        }
 
         // Only backend ASR or an explicit doctor edit is approved for LLM input.
         // Browser preview text stays editable until the doctor confirms it.
         if (savedSource === 'backend_asr' && parsedAsrResult?.quality?.status !== 'ACCEPT') return;
-        if (savedSource !== 'backend_asr' && savedSource !== 'doctor_approved_edit') return;
+        if (savedSource !== 'backend_asr' && savedSource !== 'doctor_approved_edit') {
+          setIsGeneratingLLM(false);
+          return;
+        }
 
+        const transcriptKey = `${savedSource}:${savedTranscript}`;
+        if (processedTranscriptRef.current === transcriptKey) return;
+        processedTranscriptRef.current = transcriptKey;
         setIsGeneratingLLM(true);
         fetch(`${API_BASE}/api/v1/encounters/process-transcript`, {
           method: 'POST',
@@ -110,8 +132,12 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             doctor_info: docInfoObj
           })
         })
-          .then((res) => res.json())
+          .then((res) => {
+            if (!res.ok) throw new Error(`LLM HTTP ${res.status}`);
+            return res.json();
+          })
           .then((data) => {
+            if (disposed) return;
             if (data.asr_quality) {
               setAsrResult((previous) => ({ ...previous, quality: data.asr_quality }));
             }
@@ -139,12 +165,21 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             }
           })
           .catch((err) => {
-            console.error('LLM Processing error:', err);
+            if (!disposed) console.error('LLM Processing error:', err);
           })
           .finally(() => {
-            setIsGeneratingLLM(false);
+            if (!disposed) setIsGeneratingLLM(false);
           });
+      };
+
+      loadTranscriptState();
+      if (localStorage.getItem(`pvs_transcript_source_${encounterId}`) === 'backend_asr_pending') {
+        pollTimer = setInterval(loadTranscriptState, 500);
       }
+      return () => {
+        disposed = true;
+        if (pollTimer) clearInterval(pollTimer);
+      };
     }
   }, [encounterId]);
 
@@ -328,7 +363,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
         <div className="grid grid-cols-1 gap-2 text-xs font-bold">
           <div className={`rounded-xl border px-3 py-2 ${asrResult.status === 'SUCCESS' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
-            สถานะการถอดเสียง: {asrStatusText}{asrResult.provider ? ' · จากระบบถอดเสียง' : ''}
+            สถานะการถอดเสียง: {asrStatusText}{asrResult.provider ? ' · จากระบบถอดเสียง' : ''}{asrResult.model ? ` · ${asrResult.model}` : ''}
             {asrResult.quality?.grade_label ? ` · ${asrResult.quality.grade_label}` : ''}
             {asrResult.quality?.score !== undefined ? ` · คะแนนคุณภาพ ${asrResult.quality.score} จากเกณฑ์ ${asrResult.quality.threshold ?? 0.65}` : ''}
             {(asrResult.status === 'QUALITY_FAILED' || asrResult.quality?.status === 'REJECT') && ' · ยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง'}
@@ -376,7 +411,9 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         {isGeneratingLLM && (
           <div className="bg-[#Eefdf2] border border-[#C3E8D1] rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-4 shadow-sm animate-pulse">
             <span className="material-symbols-outlined text-4xl text-[#10A352] animate-spin">autorenew</span>
-            <span className="text-[#10A352] font-bold">✨ AI กำลังประมวลผล คำแนะนำทางการแพทย์อยู่...</span>
+            <span className="text-[#10A352] font-bold">
+              {asrResult.status === 'PROCESSING' ? 'กำลังถอดเสียงจากไฟล์บันทึก...' : '✨ AI กำลังประมวลผลคำแนะนำทางการแพทย์...'}
+            </span>
           </div>
         )}
 

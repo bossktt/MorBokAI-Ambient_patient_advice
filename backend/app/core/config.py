@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     ASR_QUALITY_MIN_SCORE: float = 0.65
     ASR_QUALITY_MIN_CONFIDENCE: float = 0.55
     ASR_QUALITY_MIN_CHARS: int = 10
-    OPENROUTER_ASR_MODEL: str = "qwen/qwen3-asr-1.7b"
+    OPENROUTER_ASR_MODEL: str = "openai/gpt-transcribe"
 
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
