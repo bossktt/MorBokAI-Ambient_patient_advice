@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     ASR_QUALITY_MIN_SCORE: float = 0.65
     ASR_QUALITY_MIN_CONFIDENCE: float = 0.55
     ASR_QUALITY_MIN_CHARS: int = 10
-    OPENROUTER_ASR_MODEL: str = "openai/gpt-transcribe"
+    OPENROUTER_ASR_MODEL: str = "x-ai/grok-stt-1.0"
+    OPENROUTER_ASR_VERIFIER_MODEL: str = "openai/whisper-large-v3-turbo"
+    ASR_MIN_MODEL_AGREEMENT: float = 0.85
 
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None

@@ -31,7 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; agreement_score?: number; agreement_threshold?: number } | null }>({ status: 'UNKNOWN' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -50,7 +50,13 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [followUpDate, setFollowUpDate] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
 
-  const asrStatusText = asrResult.status === 'SUCCESS'
+  const hasModelDisagreement = asrResult.quality?.reasons?.includes('model_disagreement');
+  const hasSingleModelOnly = asrResult.quality?.reasons?.includes('single_model_only');
+  const asrStatusText = hasModelDisagreement
+    ? 'ผลถอดเสียง 2 โมเดลไม่ตรงกัน ต้องตรวจสอบ'
+    : hasSingleModelOnly
+      ? 'มีผลจาก ASR เพียงโมเดลเดียว ต้องตรวจสอบ'
+    : asrResult.status === 'SUCCESS'
     ? 'ถอดเสียงเรียบร้อย'
     : asrResult.status === 'PROCESSING'
       ? 'กำลังถอดเสียงจากไฟล์บันทึก'
@@ -96,7 +102,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         }
 
         const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
-        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[] } | null } | null = null;
+        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; agreement_score?: number; agreement_threshold?: number } | null } | null = null;
         if (savedAsrResult) {
           try {
             parsedAsrResult = JSON.parse(savedAsrResult);
@@ -379,13 +385,27 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
               <span className="text-[10px] font-bold text-[#8A0000]">⚠️ ต้องตรวจสอบต้นฉบับ</span>
             )}
           </div>
-          <textarea
-            value={rawTranscript}
+            <textarea
+              value={rawTranscript}
             onChange={(e) => setRawTranscript(e.target.value)}
             className="w-full rounded-xl border border-[#C3C6D1] bg-[#F0F3FF] p-3 text-xs leading-relaxed text-[#111C2C]"
             rows={6}
-            placeholder="ไม่พบต้นฉบับถอดเสียง"
-          />
+              placeholder="ไม่พบต้นฉบับถอดเสียง"
+            />
+          {hasModelDisagreement && asrResult.alternatives?.verifier && (
+            <div className="rounded-xl border border-[#B06000]/40 bg-[#FEF7E0] p-3 space-y-2">
+              <div className="text-xs font-bold text-[#8A4B00]">
+                ผลจาก Verifier ({asrResult.quality?.agreement_score ?? 0} เทียบเกณฑ์ {asrResult.quality?.agreement_threshold ?? 0.85})
+              </div>
+              <textarea
+                readOnly
+                value={asrResult.alternatives.verifier}
+                className="w-full rounded-xl border border-[#B06000]/30 bg-white p-3 text-xs leading-relaxed text-[#111C2C]"
+                rows={4}
+              />
+              <p className="text-xs font-bold text-[#8A4B00]">กรุณาเปรียบเทียบกับต้นฉบับและแก้ไขข้อความด้านบนก่อนกดสร้างสรุป</p>
+            </div>
+          )}
           {transcriptSource !== 'backend_asr' && (
             <p className="text-xs font-bold text-[#8A0000]">
               ระบบยังไม่ส่งข้อความนี้ให้ AI จนกว่าแพทย์จะตรวจสอบและกดบันทึก

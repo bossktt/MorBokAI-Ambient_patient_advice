@@ -6,7 +6,9 @@ import requests
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Optional
 
 from app.core.config import settings
@@ -25,6 +27,7 @@ class ASRResult:
     error: Optional[str] = None
     confidence: Optional[float] = None
     quality: Optional[dict] = None
+    alternatives: Optional[dict] = None
 
     def as_dict(self) -> dict:
         return {
@@ -35,6 +38,7 @@ class ASRResult:
             "error": self.error,
             "confidence": self.confidence,
             "quality": self.quality,
+            "alternatives": self.alternatives,
         }
 
 
@@ -78,6 +82,35 @@ def deduplicate_repeated_sentences(transcript: str) -> str:
             result.append(tokens[index])
             index += 1
     return " ".join(result)
+
+
+def compare_transcripts(primary: str, verifier: str) -> dict:
+    """Compare two normalized transcripts without merging their wording."""
+    primary_normalized = re.sub(r"\s+", "", (primary or "").casefold())
+    verifier_normalized = re.sub(r"\s+", "", (verifier or "").casefold())
+    agreement_score = SequenceMatcher(None, primary_normalized, verifier_normalized).ratio()
+
+    def critical_tokens(text: str) -> set[str]:
+        return set(re.findall(r"[a-z][a-z0-9-]*|\d+(?:[.,]\d+)?", text.casefold()))
+
+    primary_critical = critical_tokens(primary or "")
+    verifier_critical = critical_tokens(verifier or "")
+    critical_disagreement = sorted(primary_critical.symmetric_difference(verifier_critical))
+    min_agreement = getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85)
+    return {
+        "score": round(agreement_score, 3),
+        "threshold": min_agreement,
+        "critical_disagreement": critical_disagreement,
+        "agrees": agreement_score >= min_agreement and not critical_disagreement,
+    }
+
+
+def _quality_grade(score: float) -> tuple[str, str]:
+    if score <= 0.35:
+        return "POOR", "ระบบเสียงไม่ชัดพอ"
+    if score <= 0.65:
+        return "MEDIUM", "ระบบเสียงอยู่ระดับปานกลาง"
+    return "GOOD", "ระบบเสียงดี"
 
 
 def assess_transcript_quality(transcript: str, confidence: Optional[float] = None) -> dict:
@@ -133,21 +166,14 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
         if confidence < settings.ASR_QUALITY_MIN_CONFIDENCE:
             reasons.append("provider_confidence_below_threshold")
             hard_fail = True
+            score = min(score, settings.ASR_QUALITY_MIN_SCORE)
 
     score = round(max(0.0, min(1.0, score)), 3)
-    if score <= 0.35:
-        grade = "POOR"
-        grade_label = "ระบบเสียงไม่ชัดพอ"
-    elif score <= 0.65:
-        grade = "MEDIUM"
-        grade_label = "ระบบเสียงอยู่ระดับปานกลาง"
-    else:
-        grade = "GOOD"
-        grade_label = "ระบบเสียงดี"
+    grade, grade_label = _quality_grade(score)
 
     # Only GOOD (> 0.65) is safe to send to the clinical LLM. A score of
     # exactly 0.65 remains MEDIUM by the requested grading bands.
-    status = "ACCEPT" if not hard_fail and grade == "GOOD" else "REJECT"
+    status = "ACCEPT" if not hard_fail and score >= settings.ASR_QUALITY_MIN_SCORE else "REJECT"
     if status == "REJECT" and not reasons:
         reasons.append("quality_score_below_threshold")
     return {
@@ -159,6 +185,60 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
         "reasons": reasons,
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
     }
+
+
+def assess_dual_transcript_quality(
+    primary: str,
+    verifier: str,
+    primary_confidence: Optional[float] = None,
+    verifier_confidence: Optional[float] = None,
+) -> dict:
+    """Accept only when both ASR outputs are individually usable and agree."""
+    primary_quality = assess_transcript_quality(primary, primary_confidence)
+    verifier_quality = assess_transcript_quality(verifier, verifier_confidence)
+    agreement = compare_transcripts(primary, verifier)
+    score = min(primary_quality["score"], verifier_quality["score"], agreement["score"])
+    reasons = []
+    if primary_quality["status"] != "ACCEPT":
+        reasons.append("primary_quality_rejected")
+    if verifier_quality["status"] != "ACCEPT":
+        reasons.append("verifier_quality_rejected")
+    if not agreement["agrees"]:
+        reasons.append("model_disagreement")
+        if agreement["critical_disagreement"]:
+            reasons.append("critical_token_disagreement")
+
+    score = round(max(0.0, min(1.0, score)), 3)
+    grade, grade_label = _quality_grade(score)
+    status = "ACCEPT" if not reasons and score >= settings.ASR_QUALITY_MIN_SCORE else "REJECT"
+    if status == "REJECT" and not reasons:
+        reasons.append("quality_score_below_threshold")
+    return {
+        "status": status,
+        "score": score,
+        "grade": grade,
+        "grade_label": grade_label,
+        "confidence": primary_quality.get("confidence"),
+        "reasons": reasons,
+        "threshold": settings.ASR_QUALITY_MIN_SCORE,
+        "agreement_score": agreement["score"],
+        "agreement_threshold": agreement["threshold"],
+        "critical_disagreement": agreement["critical_disagreement"],
+        "models": {
+            "primary": getattr(settings, "OPENROUTER_ASR_MODEL", "x-ai/grok-stt-1.0"),
+            "verifier": getattr(settings, "OPENROUTER_ASR_VERIFIER_MODEL", "openai/whisper-large-v3-turbo"),
+        },
+    }
+
+
+def mark_single_model_quality(quality: dict) -> dict:
+    """A fallback transcript must be reviewed because it lacks model agreement."""
+    quality = dict(quality)
+    quality["status"] = "REJECT"
+    quality["reasons"] = list(quality.get("reasons") or [])
+    if "single_model_only" not in quality["reasons"]:
+        quality["reasons"].append("single_model_only")
+    return quality
 
 def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """
@@ -203,11 +283,43 @@ def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
 class MultiTierASRService:
     """
     Multi-Tiered Speech-to-Text Pipeline:
-    - Step 1 (Primary): OpenRouter ASR (openai/gpt-transcribe)
-    - Step 2 (Secondary): AssemblyAI ASR (https://api.assemblyai.com/v2)
-    - Step 3 (Tertiary): Google Speech-to-Text (via gcp-key.json credentials)
+    - Step 1: Parallel OpenRouter ASR (Grok STT primary + Whisper verifier)
+    - Step 2: AssemblyAI ASR (https://api.assemblyai.com/v2)
+    - Step 3: Google Speech-to-Text (via gcp-key.json credentials)
     - No synthetic transcript fallback; failures are surfaced to the doctor.
     """
+
+    @staticmethod
+    def _transcribe_openrouter_model(
+        api_key: str,
+        model_name: str,
+        filename: str,
+        wav_bytes: bytes,
+        content_type: str,
+    ) -> Optional[dict]:
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": (filename, wav_bytes, content_type)},
+                data={"model": model_name, "language": "th"},
+                timeout=15,
+            )
+            if response.status_code != 200:
+                logger.warning(f"OpenRouter ASR {model_name} failed with status {response.status_code}")
+                return None
+            response_data = response.json()
+            text = deduplicate_repeated_sentences(response_data.get("text", ""))
+            if not text:
+                return None
+            return {
+                "transcript": text,
+                "confidence": response_data.get("confidence"),
+                "model": model_name,
+            }
+        except Exception as e:
+            logger.warning(f"OpenRouter ASR with {model_name} failed: {e}")
+            return None
 
     @staticmethod
     def _transcribe_assemblyai(audio_bytes: bytes) -> Optional[str]:
@@ -302,52 +414,81 @@ class MultiTierASRService:
         filename, content_type = mime_to_file.get(mime_type, ("audio.webm", "audio/webm"))
 
         # =========================================================================
-        # STEP 1: Primary ASR - OpenRouter Audio Transcriptions
+        # STEP 1: Parallel primary/verifier ASR - OpenRouter Audio Transcriptions
         # =========================================================================
         openrouter_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
         if openrouter_key:
-            openrouter_models = [
-                getattr(settings, "OPENROUTER_ASR_MODEL", "openai/gpt-transcribe"),
-                "openai/whisper-large-v3-turbo",
-                "fish-audio/transcribe-1",
-                "nvidia/parakeet-tdt-0.6b-v3"
-            ]
-            openrouter_models = list(dict.fromkeys(openrouter_models))
-            for model_name in openrouter_models:
-                try:
-                    response = requests.post(
-                        "https://openrouter.ai/api/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {openrouter_key}"},
-                        files={"file": (filename, wav_bytes, content_type)},
-                        data={"model": model_name, "language": "th"},
-                        timeout=15
-                    )
-                    if response.status_code == 200:
-                        response_data = response.json()
-                        text = deduplicate_repeated_sentences(response_data.get("text", ""))
-                        if text:
-                            provider_confidence = response_data.get("confidence")
-                            quality = assess_transcript_quality(text, provider_confidence)
-                            logger.info(f"Step 1 (OpenRouter ASR with {model_name}) succeeded.")
-                            return ASRResult(
-                                transcript=text,
-                                status="SUCCESS",
-                                provider="openrouter",
-                                model=model_name,
-                                confidence=provider_confidence,
-                                quality=quality,
-                            )
-                        else:
-                            logger.info(f"Step 1 (OpenRouter ASR with {model_name}) returned 200 OK.")
-                except Exception as e:
-                    logger.warning(f"Step 1 (OpenRouter ASR with {model_name}) failed: {e}")
+            primary_model = getattr(settings, "OPENROUTER_ASR_MODEL", "x-ai/grok-stt-1.0")
+            verifier_model = getattr(settings, "OPENROUTER_ASR_VERIFIER_MODEL", "openai/whisper-large-v3-turbo")
+            model_results = {}
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = {
+                    executor.submit(
+                        MultiTierASRService._transcribe_openrouter_model,
+                        openrouter_key,
+                        model_name,
+                        filename,
+                        wav_bytes,
+                        content_type,
+                    ): model_name
+                    for model_name in (primary_model, verifier_model)
+                }
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        model_results[futures[future]] = result
+
+            primary_result = model_results.get(primary_model)
+            verifier_result = model_results.get(verifier_model)
+            if primary_result and verifier_result:
+                primary_text = primary_result["transcript"]
+                verifier_text = verifier_result["transcript"]
+                quality = assess_dual_transcript_quality(
+                    primary_text,
+                    verifier_text,
+                    primary_result.get("confidence"),
+                    verifier_result.get("confidence"),
+                )
+                logger.info(
+                    "Step 1 dual ASR completed: agreement=%s status=%s",
+                    quality["agreement_score"],
+                    quality["status"],
+                )
+                return ASRResult(
+                    transcript=primary_text,
+                    status="SUCCESS",
+                    provider="openrouter_dual",
+                    model=primary_model,
+                    confidence=primary_result.get("confidence"),
+                    quality=quality,
+                    alternatives={"primary": primary_text, "verifier": verifier_text},
+                )
+            if primary_result or verifier_result:
+                single_result = primary_result or verifier_result
+                single_model = primary_model if primary_result else verifier_model
+                single_quality = mark_single_model_quality(
+                    assess_transcript_quality(single_result["transcript"], single_result.get("confidence"))
+                )
+                single_quality["models"] = {"available": single_model, "missing": verifier_model if primary_result else primary_model}
+                return ASRResult(
+                    transcript=single_result["transcript"],
+                    status="SUCCESS",
+                    provider="openrouter",
+                    model=single_model,
+                    confidence=single_result.get("confidence"),
+                    quality=single_quality,
+                    alternatives={
+                        "primary": primary_result["transcript"] if primary_result else "",
+                        "verifier": verifier_result["transcript"] if verifier_result else "",
+                    },
+                )
 
         # =========================================================================
         # STEP 2: Secondary ASR - AssemblyAI Speech-to-Text API
         # =========================================================================
         assembly_text = MultiTierASRService._transcribe_assemblyai(wav_bytes)
         if assembly_text:
-            quality = assess_transcript_quality(assembly_text)
+            quality = mark_single_model_quality(assess_transcript_quality(assembly_text))
             logger.info("Step 2 (AssemblyAI Speech-to-Text) succeeded.")
             return ASRResult(
                 transcript=assembly_text,
@@ -407,7 +548,7 @@ class MultiTierASRService:
                         provider="google",
                         model="google-speech-default-th-TH",
                         confidence=provider_confidence,
-                        quality=assess_transcript_quality(final_text, provider_confidence),
+                        quality=mark_single_model_quality(assess_transcript_quality(final_text, provider_confidence)),
                     )
             except Exception as e:
                 logger.warning(f"Step 3 (Google Speech-to-Text) failed: {e}")

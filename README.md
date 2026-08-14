@@ -21,7 +21,8 @@ tokens, and provider confidence when available. Results expose `asr_quality.stat
 fields and the LLM is not called.
 Quality grades are `0–0.35` = ระบบเสียงไม่ชัดพอ, `0.36–0.65` = ระบบเสียงอยู่ระดับปานกลาง,
 and `>0.65` = ระบบเสียงดี. Only the last grade is allowed into the clinical LLM.
-The primary OpenRouter ASR model is `openai/gpt-transcribe`, with configured fallbacks.
+The primary OpenRouter ASR model is `x-ai/grok-stt-1.0`, verified in parallel by `openai/whisper-large-v3-turbo`.
+The transcript is accepted automatically only when both models agree; disagreement requires doctor review.
 Each check is also recorded as an `ASR_QUALITY_EVALUATED` event in the encounter log,
 including `asr_quality.status`, `score`, `reasons`, and `threshold`.
 

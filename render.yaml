@@ -22,7 +22,11 @@ services:
       - key: OPENROUTER_PROVIDER
         value: google-vertex
       - key: OPENROUTER_ASR_MODEL
-        value: openai/gpt-transcribe
+        value: x-ai/grok-stt-1.0
+      - key: OPENROUTER_ASR_VERIFIER_MODEL
+        value: openai/whisper-large-v3-turbo
+      - key: ASR_MIN_MODEL_AGREEMENT
+        value: "0.85"
       - key: GEMINI_MODEL
         value: gemini-2.5-flash-lite
       - key: GEMINI_API_KEY

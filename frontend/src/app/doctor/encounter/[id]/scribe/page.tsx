@@ -282,6 +282,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           model: data.model || null,
           error,
           quality: data.quality || null,
+          alternatives: data.alternatives || null,
         }));
       } catch (e) {
         console.warn('Backend transcription failed:', e);
@@ -292,6 +293,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           model: null,
           error: 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป',
           quality: null,
+          alternatives: null,
         }));
       }
     })();

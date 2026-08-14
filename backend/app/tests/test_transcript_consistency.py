@@ -5,7 +5,13 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
-from app.services.asr_service import ASRResult, MultiTierASRService, assess_transcript_quality, deduplicate_repeated_sentences
+from app.services.asr_service import (
+    ASRResult,
+    MultiTierASRService,
+    assess_dual_transcript_quality,
+    assess_transcript_quality,
+    deduplicate_repeated_sentences,
+)
 from app.services.llm_adapter import ground_summary_to_transcript
 
 
@@ -13,12 +19,30 @@ client = TestClient(app)
 
 
 class TestTranscriptConsistency(unittest.TestCase):
+    def test_dual_asr_requires_agreement_on_critical_tokens(self):
+        accepted = assess_dual_transcript_quality(
+            "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
+            "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
+        )
+        rejected = assess_dual_transcript_quality(
+            "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
+            "แพทย์ปรับยา Metformin เป็น 500 mg หลังอาหาร",
+        )
+        self.assertEqual(accepted["status"], "ACCEPT")
+        self.assertEqual(rejected["status"], "REJECT")
+        self.assertIn("critical_token_disagreement", rejected["reasons"])
+
     def test_repeated_asr_sentence_is_kept_once(self):
         repeated = "แพทย์บอกให้พักผ่อนที่บ้าน แพทย์บอกให้พักผ่อนที่บ้าน"
         self.assertEqual(deduplicate_repeated_sentences(repeated), "แพทย์บอกให้พักผ่อนที่บ้าน")
 
         punctuated = "ให้ดื่มน้ำมาก ๆ ครับ ให้ดื่มน้ำมาก ๆ ครับ"
         self.assertEqual(deduplicate_repeated_sentences(punctuated), "ให้ดื่มน้ำมาก ๆ ครับ")
+
+    def test_quality_threshold_controls_acceptance(self):
+        with patch.object(settings, "ASR_QUALITY_MIN_SCORE", 1.01):
+            quality = assess_transcript_quality("แพทย์บอกให้พักผ่อนที่บ้าน")
+        self.assertEqual(quality["status"], "REJECT")
 
     def test_asr_quality_gate_accepts_clinical_text_and_rejects_noise(self):
         accepted = assess_transcript_quality("แพทย์บอกให้พักผ่อนที่บ้าน")
