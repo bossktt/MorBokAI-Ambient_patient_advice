@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     SUMMARY_GENERATION_SEED: int = 42
     SUMMARY_PROMPT_VERSION: str = "grounded-clinical-summary-v1"
 
+    # ASR quality gate before any clinical LLM call.
+    ASR_QUALITY_MIN_SCORE: float = 0.65
+    ASR_QUALITY_MIN_CONFIDENCE: float = 0.55
+    ASR_QUALITY_MIN_CHARS: int = 10
+
     # AssemblyAI (ASR fallback for audio pipeline)
     ASSEMBLYAI_API_KEY: Optional[str] = None
     GCP_KEY_PATH: Optional[str] = "gcp-key.json"

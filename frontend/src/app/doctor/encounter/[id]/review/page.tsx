@@ -31,7 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null }>({ status: 'UNKNOWN' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; reasons?: string[] } | null }>({ status: 'UNKNOWN' });
   const [clinicalStatus, setClinicalStatus] = useState<string>('NOT_STARTED');
   const [clinicalMessage, setClinicalMessage] = useState<string>('');
   const [summaryCache, setSummaryCache] = useState<{ status: string; input_fingerprint?: string }>({ status: 'NOT_STARTED' });
@@ -79,8 +79,12 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
       setTranscriptSource(savedSource);
       const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
+      let parsedAsrResult: { status: string; provider?: string | null; error?: string | null; quality?: { status?: string; score?: number; reasons?: string[] } | null } | null = null;
       if (savedAsrResult) {
-        try { setAsrResult(JSON.parse(savedAsrResult)); } catch (e) { setAsrResult({ status: 'UNKNOWN' }); }
+        try {
+          parsedAsrResult = JSON.parse(savedAsrResult);
+          setAsrResult(parsedAsrResult || { status: 'UNKNOWN' });
+        } catch (e) { setAsrResult({ status: 'UNKNOWN' }); }
       }
 
       if (savedTranscript) {
@@ -88,6 +92,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
 
         // Only backend ASR or an explicit doctor edit is approved for LLM input.
         // Browser preview text stays editable until the doctor confirms it.
+        if (savedSource === 'backend_asr' && parsedAsrResult?.quality?.status !== 'ACCEPT') return;
         if (savedSource !== 'backend_asr' && savedSource !== 'doctor_approved_edit') return;
 
         setIsGeneratingLLM(true);
@@ -105,6 +110,9 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             setClinicalStatus(data.clinical_extraction_status || data.status || 'UNKNOWN');
             setClinicalMessage(data.message || data.error || '');
             setSummaryCache(data.summary_cache || { status: 'NOT_CACHED' });
+            if (data.asr_quality) {
+              setAsrResult((previous) => ({ ...previous, quality: data.asr_quality }));
+            }
             if (data.status === 'SUCCESS') {
               const rawDiag = (data.diagnosis || '').trim();
               const invalidKeywords = ['ไม่ระบุ', 'ไม่มี', 'ไม่พบข้อมูล', 'ไม่พบคำวินิจฉัย', 'ไม่พบข้อวินิจฉัย', 'ไม่ระบุข้อวินิจฉัย', 'ไม่พบการวินิจฉัย', 'no diagnosis', 'not specified'];
@@ -319,6 +327,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         <div className="grid grid-cols-1 gap-2 text-xs font-bold">
           <div className={`rounded-xl border px-3 py-2 ${asrResult.status === 'SUCCESS' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>
             ASR_STATUS: {asrResult.status}{asrResult.provider ? ` · ${asrResult.provider}` : ''}
+            {asrResult.quality?.score !== undefined ? ` · quality ${asrResult.quality.score}` : ''}
             {asrResult.error ? ` · ${asrResult.error}` : ''}
           </div>
           <div className={`rounded-xl border px-3 py-2 ${clinicalStatus === 'GROUNDED' ? 'border-[#C3E8D1] bg-[#Eefdf2] text-[#006D33]' : 'border-[#BA1A1A]/40 bg-[#FFF0F0] text-[#8A0000]'}`}>

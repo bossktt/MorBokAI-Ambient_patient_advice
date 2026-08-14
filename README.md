@@ -14,6 +14,12 @@ MorBok AI implements a failover speech recognition pipeline designed for high-ac
 3. **Explicit failure handling**: No synthetic/demo transcript is returned when providers fail. The doctor must review or edit the transcript before it is sent to the clinical LLM.
 4. **Single-source persistence**: Screen 4 sends exactly one canonical transcript to the clinical LLM; competing browser/backend transcripts are never concatenated.
 
+Before clinical LLM processing, the backend applies an ASR quality gate. It checks
+minimum transcript length, speech-character ratio, placeholder/noise output, repeated
+tokens, and provider confidence when available. Results expose `asr_quality.status`,
+`score`, and `reasons`; `REJECT` returns `CANNOT_EXTRACT_SAFELY` with empty clinical
+fields and the LLM is not called.
+
 ### 2. 🏥 Clinical LLM Adapters & Provider Routing
 MorBok AI supports pluggable LLM backends configured via `DEFAULT_LLM_PROVIDER`, `OPENROUTER_MODEL`, and `OPENROUTER_PROVIDER`:
 - **OpenRouter (`google/gemini-2.5-flash`) with Google Vertex Routing**: High-speed, multimodal reasoning routed specifically via Google Vertex AI infrastructure (`OPENROUTER_PROVIDER=google-vertex`).

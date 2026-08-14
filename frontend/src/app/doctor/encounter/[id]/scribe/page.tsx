@@ -227,6 +227,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     let asrStatus = 'FAILED';
     let asrProvider: string | null = null;
     let asrErrorMessage = '';
+    let asrQuality: Record<string, unknown> | null = null;
 
     // Transcribe recorded audio via backend ASR if chunks exist
     const chunks = chunksRef.current;
@@ -241,12 +242,20 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         });
         if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
         const data = await res.json();
+        asrQuality = data.quality || null;
         setDebugInfo((d) => `${d}\n⬇️ ASR response: ${JSON.stringify(data).slice(0, 120)}`);
-        if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim()) {
+        if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim() && data.quality?.status === 'ACCEPT') {
           finalTranscript = data.transcript.trim();
           asrStatus = 'SUCCESS';
           asrProvider = data.provider || 'backend';
           setAsrError('');
+        } else if (data.status === 'SUCCESS' && data.transcript && data.transcript.trim()) {
+          transcriptSource = 'backend_asr_quality_failed';
+          asrStatus = 'QUALITY_FAILED';
+          finalTranscript = data.transcript.trim();
+          asrProvider = data.provider || 'backend';
+          asrErrorMessage = `คุณภาพ ASR ไม่ผ่าน (${data.quality?.score ?? 'ไม่มีคะแนน'}) กรุณาตรวจแก้ต้นฉบับก่อนสร้างสรุป`;
+          setAsrError(asrErrorMessage);
         } else {
           transcriptSource = 'browser_preview_after_asr_failure';
           finalTranscript = typedText;
@@ -278,6 +287,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         status: asrStatus,
         provider: asrProvider,
         error: asrErrorMessage || null,
+        quality: asrQuality,
       }));
     }
 

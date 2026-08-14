@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 from app.main import app
-from app.services.asr_service import MultiTierASRService
+from app.services.asr_service import MultiTierASRService, assess_transcript_quality
 from app.services.llm_adapter import ground_summary_to_transcript
 
 
@@ -13,6 +13,26 @@ client = TestClient(app)
 
 
 class TestTranscriptConsistency(unittest.TestCase):
+    def test_asr_quality_gate_accepts_clinical_text_and_rejects_noise(self):
+        accepted = assess_transcript_quality("แพทย์บอกให้พักผ่อนที่บ้าน")
+        rejected = assess_transcript_quality("!!!! ????? ....")
+        self.assertEqual(accepted["status"], "ACCEPT")
+        self.assertGreaterEqual(accepted["score"], settings.ASR_QUALITY_MIN_SCORE)
+        self.assertEqual(rejected["status"], "REJECT")
+        self.assertIn("too_much_non_speech_noise", rejected["reasons"])
+
+    def test_low_asr_quality_blocks_llm_call(self):
+        with patch("app.main.get_llm_adapter") as get_adapter:
+            response = client.post(
+                "/api/v1/encounters/process-transcript",
+                json={"encounter_id": "ENC_LOW_ASR", "raw_transcript": "!!!! ????? ...."},
+            )
+
+        data = response.json()
+        self.assertEqual(data["status"], "CANNOT_EXTRACT_SAFELY")
+        self.assertEqual(data["asr_quality"]["status"], "REJECT")
+        get_adapter.assert_not_called()
+
     def test_asr_failure_never_returns_demo_transcript(self):
         with patch.object(settings, "OPENROUTER_API_KEY", None), patch.object(settings, "ASSEMBLYAI_API_KEY", None), patch.object(settings, "GCP_KEY_PATH", "/tmp/does-not-exist-gcp-key.json"):
             result = MultiTierASRService.transcribe_audio_result(b"\x00\x01" * 200)

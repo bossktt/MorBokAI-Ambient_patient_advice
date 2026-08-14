@@ -39,7 +39,7 @@ import redis
 from app.core.config import settings
 from app.services.deid_engine import DeIdentificationEngine
 from app.services.llm_adapter import get_llm_adapter, ground_summary_to_transcript
-from app.services.asr_service import MultiTierASRService
+from app.services.asr_service import MultiTierASRService, assess_transcript_quality
 from app.services.pdf_service import PDFService
 from app.services.telemetry_service import TelemetryService, TELEMETRY_LOG_PATH
 
@@ -266,6 +266,7 @@ def process_transcript(payload: dict):
             "stopMeds": [],
             "changeMeds": [],
             "followUpDate": "",
+            "asr_quality": assess_transcript_quality(""),
             "llm_calculation_time_sec": 0.0,
             "llm_draft_word_count": 0
         }
@@ -276,6 +277,23 @@ def process_transcript(payload: dict):
         "license_no": doctor_info.get("license_no", "")
     }
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
+    asr_quality = assess_transcript_quality(raw_transcript, payload.get("asr_confidence"))
+    if asr_quality["status"] != "ACCEPT":
+        return {
+            "status": "CANNOT_EXTRACT_SAFELY",
+            "clinical_extraction_status": "CANNOT_EXTRACT_SAFELY",
+            "message": "ASR คุณภาพต่ำ จึงไม่ส่งข้อความไปยัง clinical LLM กรุณาบันทึกเสียงใหม่หรือตรวจแก้ต้นฉบับ",
+            "canonical_transcript": raw_transcript,
+            "asr_quality": asr_quality,
+            "diagnosis": "",
+            "instructions": [],
+            "startMeds": [],
+            "stopMeds": [],
+            "changeMeds": [],
+            "followUpDate": "",
+            "llm_calculation_time_sec": 0.0,
+            "llm_draft_word_count": 0,
+        }
     if not DeIdentificationEngine.verify_zero_pii(sanitized_text, session_meta):
         return {
             "status": "CANNOT_EXTRACT_SAFELY",
@@ -288,6 +306,7 @@ def process_transcript(payload: dict):
             "stopMeds": [],
             "changeMeds": [],
             "followUpDate": "",
+            "asr_quality": asr_quality,
             "llm_calculation_time_sec": 0.0,
             "llm_draft_word_count": 0,
         }
@@ -380,6 +399,7 @@ def process_transcript(payload: dict):
         "clinical_extraction_status": "GROUNDED" if has_grounded_facts else "CANNOT_EXTRACT_SAFELY",
         "message": "" if has_grounded_facts else "ไม่พบข้อเท็จจริงทางคลินิกที่มีหลักฐานตรงกับต้นฉบับ จึงเว้นช่องว่างทั้งหมดเพื่อให้แพทย์ตรวจสอบ",
         "canonical_transcript": raw_transcript,
+        "asr_quality": asr_quality,
         "diagnosis": diagnosis,
         "instructions": instructions,
         "startMeds": start_meds,
