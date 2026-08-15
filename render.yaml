@@ -27,6 +27,12 @@ services:
         value: openai/whisper-large-v3-turbo
       - key: ASR_MIN_MODEL_AGREEMENT
         value: "0.85"
+      - key: ASR_MIN_DICTIONARY_COVERAGE
+        value: "0.4"
+      - key: OPENROUTER_ASR_TEMPERATURE
+        value: "0"
+      - key: ASR_DOMAIN_PROMPT
+        value: "คำแนะนำทางการแพทย์ ห้องฉุกเฉิน ประเทศไทย Metformin Amlodipine Paracetamol Cetirizine Loratadine มิลลิกรัม เม็ด รับประทาน ก่อนนอน หลังอาหาร เช้า เย็น นัดติดตามอาการ"
       - key: GEMINI_MODEL
         value: gemini-2.5-flash-lite
       - key: GEMINI_API_KEY

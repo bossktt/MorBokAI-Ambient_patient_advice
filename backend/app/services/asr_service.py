@@ -63,6 +63,15 @@ def deduplicate_repeated_sentences(transcript: str) -> str:
         previous_key = key
     text = " ".join(unique_chunks)
 
+    # Common Thai ASR glitch: the same sentence transcribed twice with only a
+    # space between (Thai has no sentence punctuation). Keep one copy.
+    if " " in text:
+        half = len(text) // 2
+        left = text[:half].strip()
+        right = text[half:].strip()
+        if left and left == right:
+            return left
+
     # Thai ASR output often has no punctuation. Remove adjacent duplicated
     # token runs while retaining the first occurrence.
     tokens = text.split()
@@ -84,22 +93,107 @@ def deduplicate_repeated_sentences(transcript: str) -> str:
     return " ".join(result)
 
 
+THAI_FILLERS = {
+    "ครับ", "ครับผม", "ค่ะ", "คะ", "นะ", "นะครับ", "นะคะ", "น่ะ", "หนา",
+    "จ๊ะ", "จ้า", "อืม", "อือ", "เอ่อ", "เออ", "อ้อ", "อ๋อ", "โอเค", "ฮะ",
+    "อ่า", "อ้า", "นั่นเอง", "งั้น", "เนอะ", "นะเนี่ย",
+}
+
+CLINICAL_UNITS = {
+    "mg", "มิลลิกรัม", "มก", "กรัม", "เม็ด", "แคปซูล", "แคป", "ช้อน",
+    "ช้อนชา", "ช้อนโต๊ะ", "วันละ", "ครั้งละ", "ก่อนนอน", "หลังอาหาร",
+    "เช้า", "เย็น", "กลางวัน", "ชั่วโมง", "วัน", "สัปดาห์", "อาทิตย์",
+}
+
+THAI_NUMBER_WORDS = {
+    "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า", "สิบ",
+    "ร้อย", "พัน", "หมื่น", "แสน", "ล้าน", "ครึ่ง",
+}
+
+THAI_SYNONYMS = {
+    "คนไข้": "ผู้ป่วย",
+    "หมอ": "แพทย์",
+}
+
+
+def _thai_word_tokenize(text: str) -> list:
+    text = (text or "").strip()
+    if not text:
+        return []
+    try:
+        from pythainlp.tokenize import word_tokenize
+        tokens = word_tokenize(text, engine="newmm", keep_whitespace=False)
+        return [t for t in tokens if t and t.strip()]
+    except Exception:
+        return [t for t in re.findall(r"[a-zA-Z0-9]+|[ก-๛]+|[^\sก-๛a-zA-Z0-9]", text) if t.strip()]
+
+
+def _normalize_tokens(text: str) -> list:
+    """Tokenize then drop fillers and map synonyms, so agreement ignores style."""
+    tokens = _thai_word_tokenize(text)
+    out = []
+    for token in tokens:
+        token = THAI_SYNONYMS.get(token, token)
+        if token in THAI_FILLERS or not token.strip():
+            continue
+        out.append(token)
+    return out
+
+
+def _dictionary_coverage(text: str) -> float:
+    tokens = _thai_word_tokenize(text)
+    if not tokens:
+        return 0.0
+    vocab = set()
+    try:
+        from pythainlp.corpus.common import thai_words
+        vocab = thai_words() if callable(thai_words) else thai_words
+    except Exception:
+        vocab = set()
+    if not vocab:
+        known = sum(1 for t in tokens if re.search(r"[a-zA-Z0-9ก-๛]", t))
+        return known / len(tokens)
+    known = 0
+    for token in tokens:
+        if token in vocab or token.isdigit() or re.fullmatch(r"[a-zA-Z0-9\-\.%]+", token):
+            known += 1
+    return known / len(tokens)
+
+
+def _extract_clinical_entities(text: str) -> set:
+    entities = set()
+    entities.update(re.findall(r"\d+(?:[.,]\d+)?", text))
+    entities.update(re.findall(r"[๐-๙]+", text))
+    entities.update(m.casefold() for m in re.findall(r"[a-z][a-z0-9\-]{1,}", text.casefold()))
+    lowered = text.casefold()
+    for unit in CLINICAL_UNITS:
+        if unit in lowered:
+            entities.add(unit)
+    for word in THAI_NUMBER_WORDS:
+        if word in text:
+            entities.add(word)
+    return entities
+
+
 def compare_transcripts(primary: str, verifier: str) -> dict:
-    """Compare two normalized transcripts without merging their wording."""
-    primary_normalized = re.sub(r"\s+", "", (primary or "").casefold())
-    verifier_normalized = re.sub(r"\s+", "", (verifier or "").casefold())
-    agreement_score = SequenceMatcher(None, primary_normalized, verifier_normalized).ratio()
+    """Compare clinical meaning, not raw wording."""
+    primary_tokens = _normalize_tokens(primary)
+    verifier_tokens = _normalize_tokens(verifier)
+    token_ratio = SequenceMatcher(None, primary_tokens, verifier_tokens).ratio()
 
-    def critical_tokens(text: str) -> set[str]:
-        return set(re.findall(r"[a-z][a-z0-9-]*|\d+(?:[.,]\d+)?", text.casefold()))
+    primary_entities = _extract_clinical_entities(primary)
+    verifier_entities = _extract_clinical_entities(verifier)
+    union = primary_entities | verifier_entities
+    entity_ratio = len(primary_entities & verifier_entities) / len(union) if union else 1.0
+    critical_disagreement = sorted(primary_entities.symmetric_difference(verifier_entities))
 
-    primary_critical = critical_tokens(primary or "")
-    verifier_critical = critical_tokens(verifier or "")
-    critical_disagreement = sorted(primary_critical.symmetric_difference(verifier_critical))
+    agreement_score = round(0.5 * token_ratio + 0.5 * entity_ratio, 3)
     min_agreement = getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85)
     return {
-        "score": round(agreement_score, 3),
+        "score": agreement_score,
         "threshold": min_agreement,
+        "token_ratio": round(token_ratio, 3),
+        "entity_ratio": round(entity_ratio, 3),
         "critical_disagreement": critical_disagreement,
         "agrees": agreement_score >= min_agreement and not critical_disagreement,
     }
@@ -151,6 +245,11 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
     if repeated_tokens:
         reasons.append("repeated_tokens")
 
+    coverage = _dictionary_coverage(text)
+    if text and coverage < getattr(settings, "ASR_MIN_DICTIONARY_COVERAGE", 0.4):
+        reasons.append("low_dictionary_coverage")
+        hard_fail = True
+
     if not text:
         score = 0.0
     elif hard_fail:
@@ -158,7 +257,7 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
         # provider happens to report a high confidence value.
         score = 0.35
     else:
-        score = 1.0
+        score = 0.5 + 0.5 * coverage
         score -= 0.15 if repeated_tokens else 0.0
     if confidence is not None:
         confidence = max(0.0, min(1.0, confidence))
@@ -178,10 +277,12 @@ def assess_transcript_quality(transcript: str, confidence: Optional[float] = Non
         reasons.append("quality_score_below_threshold")
     return {
         "status": status,
+        "decision": "ACCEPT" if status == "ACCEPT" else "REVIEW_LOW_QUALITY",
         "score": score,
         "grade": grade,
         "grade_label": grade_label,
         "confidence": confidence,
+        "dictionary_coverage": round(coverage, 3),
         "reasons": reasons,
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
     }
@@ -213,16 +314,28 @@ def assess_dual_transcript_quality(
     status = "ACCEPT" if not reasons and score >= settings.ASR_QUALITY_MIN_SCORE else "REJECT"
     if status == "REJECT" and not reasons:
         reasons.append("quality_score_below_threshold")
+
+    if status == "ACCEPT":
+        decision = "ACCEPT"
+    elif "model_disagreement" in reasons or "critical_token_disagreement" in reasons:
+        decision = "REVIEW_DISAGREEMENT"
+    else:
+        decision = "REVIEW_LOW_QUALITY"
+
     return {
         "status": status,
+        "decision": decision,
         "score": score,
         "grade": grade,
         "grade_label": grade_label,
         "confidence": primary_quality.get("confidence"),
+        "dictionary_coverage": primary_quality.get("dictionary_coverage"),
         "reasons": reasons,
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
         "agreement_score": agreement["score"],
         "agreement_threshold": agreement["threshold"],
+        "token_ratio": agreement["token_ratio"],
+        "entity_ratio": agreement["entity_ratio"],
         "critical_disagreement": agreement["critical_disagreement"],
         "models": {
             "primary": getattr(settings, "OPENROUTER_ASR_MODEL", "x-ai/grok-stt-1.0"),
@@ -235,10 +348,26 @@ def mark_single_model_quality(quality: dict) -> dict:
     """A fallback transcript must be reviewed because it lacks model agreement."""
     quality = dict(quality)
     quality["status"] = "REJECT"
+    quality["decision"] = "REVIEW_SINGLE_MODEL"
     quality["reasons"] = list(quality.get("reasons") or [])
     if "single_model_only" not in quality["reasons"]:
         quality["reasons"].append("single_model_only")
     return quality
+
+
+def _no_result_quality() -> dict:
+    """Quality payload for cases where no transcript could be produced at all."""
+    return {
+        "status": "REJECT",
+        "decision": "NO_RESULT",
+        "score": 0.0,
+        "grade": "POOR",
+        "grade_label": "",
+        "confidence": None,
+        "dictionary_coverage": 0.0,
+        "reasons": ["no_transcription_result"],
+        "threshold": settings.ASR_QUALITY_MIN_SCORE,
+    }
 
 def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """
@@ -298,11 +427,19 @@ class MultiTierASRService:
         content_type: str,
     ) -> Optional[dict]:
         try:
+            request_data = {
+                "model": model_name,
+                "language": "th",
+                "temperature": str(getattr(settings, "OPENROUTER_ASR_TEMPERATURE", 0)),
+            }
+            domain_prompt = getattr(settings, "ASR_DOMAIN_PROMPT", "") or ""
+            if domain_prompt:
+                request_data["prompt"] = domain_prompt
             response = requests.post(
                 "https://openrouter.ai/api/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {api_key}"},
                 files={"file": (filename, wav_bytes, content_type)},
-                data={"model": model_name, "language": "th"},
+                data=request_data,
                 timeout=15,
             )
             if response.status_code != 200:
@@ -398,7 +535,7 @@ class MultiTierASRService:
             return ASRResult(
                 status="EMPTY",
                 error="เสียงสั้นเกินไปหรือไม่มีข้อมูลเสียง",
-                quality=assess_transcript_quality(""),
+                quality=_no_result_quality(),
             )
 
         wav_bytes = ensure_wav_bytes(audio_bytes, sample_rate)
@@ -558,7 +695,7 @@ class MultiTierASRService:
         return ASRResult(
             status="FAILED",
             error="ไม่สามารถถอดเสียงได้จากผู้ให้บริการ ASR ที่ตั้งค่าไว้",
-            quality=assess_transcript_quality(""),
+            quality=_no_result_quality(),
         )
 
     @staticmethod

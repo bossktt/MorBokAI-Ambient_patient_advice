@@ -32,6 +32,13 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(rejected["status"], "REJECT")
         self.assertIn("critical_token_disagreement", rejected["reasons"])
 
+    def test_synonyms_and_fillers_do_not_block_agreement(self):
+        result = assess_dual_transcript_quality(
+            "สวัสดีครับ คนไข้เป็นโควิดนะครับ",
+            "สวัสดีค่ะ ผู้ป่วยเป็นโควิดน่ะ",
+        )
+        self.assertEqual(result["critical_disagreement"], [])
+
     def test_repeated_asr_sentence_is_kept_once(self):
         repeated = "แพทย์บอกให้พักผ่อนที่บ้าน แพทย์บอกให้พักผ่อนที่บ้าน"
         self.assertEqual(deduplicate_repeated_sentences(repeated), "แพทย์บอกให้พักผ่อนที่บ้าน")
@@ -97,9 +104,9 @@ class TestTranscriptConsistency(unittest.TestCase):
         with patch.object(settings, "OPENROUTER_API_KEY", None), patch.object(settings, "ASSEMBLYAI_API_KEY", None), patch.object(settings, "GCP_KEY_PATH", "/tmp/does-not-exist-gcp-key.json"):
             result = MultiTierASRService.transcribe_audio_result(b"\x00\x01" * 200)
 
-        self.assertEqual(result.status, "FAILED")
-        self.assertEqual(result.transcript, "")
-        self.assertEqual(MultiTierASRService.transcribe_audio_bytes(b"\x00\x01" * 200), "")
+            self.assertEqual(result.status, "FAILED")
+            self.assertEqual(result.transcript, "")
+            self.assertEqual(MultiTierASRService.transcribe_audio_bytes(b"\x00\x01" * 200), "")
 
     def test_grounding_drops_facts_without_exact_source_evidence(self):
         transcript = "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร"

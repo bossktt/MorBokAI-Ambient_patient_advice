@@ -87,7 +87,15 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
       mimeTypeRef.current = mimeType || 'audio/webm';
 
       navigator.mediaDevices
-        .getUserMedia({ audio: true })
+        .getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
         .then((stream) => {
           setDebugInfo((d) => `${d}\n✅ mic OK, mime=${mimeTypeRef.current}`);
           const mediaRecorder = mimeType
@@ -268,11 +276,18 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         const finalTranscript = hasTranscript
           ? deduplicateRepeatedSentences(data.transcript.trim())
           : typedText;
+        const decision = data.quality?.decision;
         const error = accepted
           ? null
-          : data.quality?.grade_label
-            ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
-            : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+          : decision === 'NO_RESULT'
+            ? data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป'
+            : decision === 'REVIEW_DISAGREEMENT'
+              ? 'ผลถอดเสียงจาก 2 โมเดลไม่ตรงกัน กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
+              : decision === 'REVIEW_SINGLE_MODEL'
+                ? 'มีผลถอดเสียงเพียงโมเดลเดียว กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
+                : data.quality?.grade_label
+                  ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
+                  : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
         localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
         localStorage.setItem('pvs_transcript_latest', finalTranscript);
         localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
