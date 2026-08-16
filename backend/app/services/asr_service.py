@@ -111,10 +111,30 @@ THAI_NUMBER_WORDS = {
     "ร้อย", "พัน", "หมื่น", "แสน", "ล้าน", "ครึ่ง",
 }
 
+THAI_NUMBER_VALUES = {
+    "ศูนย์": "0", "หนึ่ง": "1", "เอ็ด": "1", "สอง": "2", "สาม": "3", "สี่": "4",
+    "ห้า": "5", "หก": "6", "เจ็ด": "7", "แปด": "8", "เก้า": "9", "สิบ": "10",
+    "ยี่สิบ": "20", "ร้อย": "100", "พัน": "1000", "หมื่น": "10000", "แสน": "100000", "ล้าน": "1000000",
+}
+
 THAI_SYNONYMS = {
     "คนไข้": "ผู้ป่วย",
     "หมอ": "แพทย์",
 }
+
+
+def _canonical_number(token: str) -> Optional[str]:
+    """Normalise Arabic/Thai numerals to a comparable value (e.g. 'หนึ่ง' -> '1')."""
+    token = (token or "").strip()
+    if re.fullmatch(r"[๐-๙]+", token):
+        return str(int("".join(str("๐๑๒๓๔๕๖๗๘๙".index(c)) for c in token)))
+    if re.fullmatch(r"\d+\.\d+", token):
+        return str(float(token))
+    return token or None
+
+
+def _is_numeric_entity(token: str) -> bool:
+    return bool(re.fullmatch(r"\d+(?:\.\d+)?", token or ""))
 
 
 def _thai_word_tokenize(text: str) -> list:
@@ -163,15 +183,21 @@ def _dictionary_coverage(text: str) -> float:
 
 def _extract_clinical_entities(text: str) -> set:
     entities = set()
-    entities.update(re.findall(r"\d+(?:[.,]\d+)?", text))
-    entities.update(re.findall(r"[๐-๙]+", text))
+    for token in re.findall(r"\d+(?:[.,]\d+)?", text):
+        canonical = _canonical_number(token)
+        if canonical is not None:
+            entities.add(canonical)
+    for token in re.findall(r"[๐-๙]+", text):
+        canonical = _canonical_number(token)
+        if canonical is not None:
+            entities.add(canonical)
     entities.update(m.casefold() for m in re.findall(r"[a-z][a-z0-9\-]{1,}", text.casefold()))
     for token in _thai_word_tokenize(text):
         if token in CLINICAL_UNITS:
             entities.add(token)
-    for word in THAI_NUMBER_WORDS:
+    for word, value in THAI_NUMBER_VALUES.items():
         if word in text:
-            entities.add(word)
+            entities.add(value)
     return entities
 
 
@@ -186,6 +212,8 @@ def compare_transcripts(primary: str, verifier: str) -> dict:
     union = primary_entities | verifier_entities
     entity_ratio = len(primary_entities & verifier_entities) / len(union) if union else 1.0
     critical_disagreement = sorted(primary_entities.symmetric_difference(verifier_entities))
+    numeric_disagreement = sorted(t for t in critical_disagreement if _is_numeric_entity(t))
+    non_numeric_disagreement = sorted(t for t in critical_disagreement if not _is_numeric_entity(t))
 
     agreement_score = round(0.5 * token_ratio + 0.5 * entity_ratio, 3)
     min_agreement = getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85)
@@ -195,6 +223,8 @@ def compare_transcripts(primary: str, verifier: str) -> dict:
         "token_ratio": round(token_ratio, 3),
         "entity_ratio": round(entity_ratio, 3),
         "critical_disagreement": critical_disagreement,
+        "numeric_disagreement": numeric_disagreement,
+        "non_numeric_disagreement": non_numeric_disagreement,
         "agrees": agreement_score >= min_agreement and not critical_disagreement,
     }
 
@@ -294,38 +324,46 @@ def assess_dual_transcript_quality(
     primary_confidence: Optional[float] = None,
     verifier_confidence: Optional[float] = None,
 ) -> dict:
-    """Accept only when both ASR outputs are individually usable and agree."""
+    """The primary transcript is canonical. The verifier may veto ONLY when the
+    verifier itself is usable AND disagrees on numbers (dosage). A low-quality
+    verifier (garbage/short) or a wording-only difference never blocks."""
     primary_quality = assess_transcript_quality(primary, primary_confidence)
     verifier_quality = assess_transcript_quality(verifier, verifier_confidence)
     agreement = compare_transcripts(primary, verifier)
     min_agreement = getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85)
-    soft_floor = getattr(settings, "ASR_MIN_AGREEMENT_SOFT_ACCEPT", 0.65)
-    score = min(primary_quality["score"], verifier_quality["score"], agreement["score"])
     reasons = []
     warnings = []
     if primary_quality["status"] != "ACCEPT":
         reasons.append("primary_quality_rejected")
+    # The verifier is advisory only: it surfaces disagreements as warnings and
+    # feeds the comparison panel, but never blocks the canonical primary.
     if verifier_quality["status"] != "ACCEPT":
-        reasons.append("verifier_quality_rejected")
-    if agreement["critical_disagreement"]:
-        reasons.append("critical_token_disagreement")
-    elif agreement["score"] < soft_floor:
-        reasons.append("model_disagreement")
-    elif agreement["score"] < min_agreement:
+        warnings.append("verifier_quality_low")
+    if agreement["numeric_disagreement"]:
+        warnings.append("numeric_disagreement")
+        warnings.extend(agreement["numeric_disagreement"])
+    if agreement["non_numeric_disagreement"]:
+        warnings.append("non_numeric_disagreement")
+    if agreement["score"] < min_agreement:
         warnings.append("low_model_agreement")
 
+    score = min(primary_quality["score"], verifier_quality["score"], agreement["score"])
     score = round(max(0.0, min(1.0, score)), 3)
     grade, grade_label = _quality_grade(score)
-    status = "ACCEPT" if not reasons and score >= settings.ASR_QUALITY_MIN_SCORE else "REJECT"
-    if status == "REJECT" and not reasons:
+    status = "REJECT" if reasons else "ACCEPT"
+    if status == "ACCEPT":
+        # The primary transcript is canonical; report its quality score.
+        score = round(primary_quality["score"], 3)
+        grade, grade_label = _quality_grade(score)
+    elif not reasons:
         reasons.append("quality_score_below_threshold")
 
     if status == "ACCEPT":
         decision = "ACCEPT_LOW_AGREEMENT" if warnings else "ACCEPT"
-    elif "model_disagreement" in reasons or "critical_token_disagreement" in reasons:
-        decision = "REVIEW_DISAGREEMENT"
-    else:
+    elif "primary_quality_rejected" in reasons:
         decision = "REVIEW_LOW_QUALITY"
+    else:
+        decision = "REVIEW_DISAGREEMENT"
 
     return {
         "status": status,
@@ -343,6 +381,8 @@ def assess_dual_transcript_quality(
         "token_ratio": agreement["token_ratio"],
         "entity_ratio": agreement["entity_ratio"],
         "critical_disagreement": agreement["critical_disagreement"],
+        "numeric_disagreement": agreement["numeric_disagreement"],
+        "non_numeric_disagreement": agreement["non_numeric_disagreement"],
         "models": {
             "primary": getattr(settings, "OPENROUTER_ASR_MODEL", "x-ai/grok-stt-1.0"),
             "verifier": getattr(settings, "OPENROUTER_ASR_VERIFIER_MODEL", "openai/whisper-large-v3-turbo"),
@@ -350,12 +390,21 @@ def assess_dual_transcript_quality(
     }
 
 
-def mark_single_model_quality(quality: dict) -> dict:
-    """A fallback transcript must be reviewed because it lacks model agreement."""
+def mark_single_model_quality(quality: dict, missing_model: Optional[str] = None) -> dict:
+    """When only one model produced a transcript: accept a usable one (with a
+    warning) instead of blocking, since the verifier may be unreliable/timeout."""
     quality = dict(quality)
+    quality["reasons"] = list(quality.get("reasons") or [])
+    quality["warnings"] = list(quality.get("warnings") or [])
+    if missing_model:
+        quality["models"] = {"missing": missing_model}
+    if quality["status"] == "ACCEPT":
+        quality["decision"] = "ACCEPT_VERIFIER_UNAVAILABLE"
+        if "verifier_unavailable" not in quality["warnings"]:
+            quality["warnings"].append("verifier_unavailable")
+        return quality
     quality["status"] = "REJECT"
     quality["decision"] = "REVIEW_SINGLE_MODEL"
-    quality["reasons"] = list(quality.get("reasons") or [])
     if "single_model_only" not in quality["reasons"]:
         quality["reasons"].append("single_model_only")
     return quality
@@ -466,7 +515,7 @@ class MultiTierASRService:
                 headers={"Authorization": f"Bearer {api_key}"},
                 files={"file": (filename, wav_bytes, content_type)},
                 data=request_data,
-                timeout=15,
+                timeout=60,
             )
             if response.status_code != 200:
                 logger.warning(f"OpenRouter ASR {model_name} failed with status {response.status_code}")

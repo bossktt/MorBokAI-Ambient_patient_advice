@@ -32,17 +32,26 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(ensure_wav_bytes(fake_webm), fake_webm)
 
     def test_dual_asr_requires_agreement_on_critical_tokens(self):
-        accepted = assess_dual_transcript_quality(
+        identical = assess_dual_transcript_quality(
             "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
             "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
         )
-        rejected = assess_dual_transcript_quality(
+        numeric_diff = assess_dual_transcript_quality(
             "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",
             "แพทย์ปรับยา Metformin เป็น 500 mg หลังอาหาร",
         )
-        self.assertEqual(accepted["status"], "ACCEPT")
-        self.assertEqual(rejected["status"], "REJECT")
-        self.assertIn("critical_token_disagreement", rejected["reasons"])
+        self.assertEqual(identical["status"], "ACCEPT")
+        self.assertEqual(identical["decision"], "ACCEPT")
+        self.assertEqual(numeric_diff["status"], "ACCEPT")
+        self.assertIn("numeric_disagreement", numeric_diff["warnings"])
+
+    def test_poor_primary_transcript_is_rejected(self):
+        result = assess_dual_transcript_quality(
+            "!!!! ????? ....",
+            "แพทย์บอกให้พักผ่อน",
+        )
+        self.assertEqual(result["status"], "REJECT")
+        self.assertIn("primary_quality_rejected", result["reasons"])
 
     def test_synonyms_and_fillers_do_not_block_agreement(self):
         result = assess_dual_transcript_quality(

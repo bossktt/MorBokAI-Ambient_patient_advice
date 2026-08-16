@@ -27,8 +27,6 @@ services:
         value: openai/whisper-large-v3-turbo
       - key: ASR_MIN_MODEL_AGREEMENT
         value: "0.85"
-      - key: ASR_MIN_AGREEMENT_SOFT_ACCEPT
-        value: "0.65"
       - key: ASR_MIN_DICTIONARY_COVERAGE
         value: "0.4"
       - key: OPENROUTER_ASR_TEMPERATURE

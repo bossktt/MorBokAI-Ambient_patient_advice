@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     OPENROUTER_ASR_MODEL: str = "x-ai/grok-stt-1.0"
     OPENROUTER_ASR_VERIFIER_MODEL: str = "openai/whisper-large-v3-turbo"
     ASR_MIN_MODEL_AGREEMENT: float = 0.85
-    ASR_MIN_AGREEMENT_SOFT_ACCEPT: float = 0.65
     ASR_MIN_DICTIONARY_COVERAGE: float = 0.4
     OPENROUTER_ASR_TEMPERATURE: float = 0.0
     ASR_DOMAIN_PROMPT: str = (
