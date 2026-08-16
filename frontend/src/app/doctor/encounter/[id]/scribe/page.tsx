@@ -216,7 +216,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     return `${m}:${s}`;
   };
 
-  const transcribeAndPersist = (blob: Blob, mimeType: string, fallbackText: string) => {
+  const transcribeAndPersist = (blob: Blob, mimeType: string, fallbackText: string, requestId: string) => {
     void (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
@@ -246,6 +246,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
                 : data.quality?.grade_label
                   ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
                   : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+        if (localStorage.getItem(`pvs_asr_request_${encounterId}`) !== requestId) return;
         localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
         localStorage.setItem('pvs_transcript_latest', finalTranscript);
         localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
@@ -259,6 +260,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         }));
       } catch (e) {
         console.warn('Backend transcription failed:', e);
+        if (localStorage.getItem(`pvs_asr_request_${encounterId}`) !== requestId) return;
         localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'browser_preview_after_asr_failure');
         localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
           status: 'FAILED',
@@ -270,6 +272,20 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         }));
       }
     })();
+  };
+
+  const stopLiveCapture = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (e) {}
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
+    }
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch (e) {}
+    }
+    chunksRef.current = [];
+    setTranscript('');
   };
 
   const handleStopScribe = async () => {
@@ -298,8 +314,10 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     const typedText = deduplicateRepeatedSentences(transcript.trim());
     const chunks = chunksRef.current;
     const audioBlob = chunks.length > 0 ? new Blob(chunks, { type: mimeTypeRef.current }) : null;
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     if (typeof window !== 'undefined') {
+      localStorage.setItem(`pvs_asr_request_${encounterId}`, requestId);
       localStorage.setItem(`pvs_transcript_${encounterId}`, typedText);
       localStorage.setItem('pvs_transcript_latest', typedText);
       localStorage.setItem(`pvs_transcript_source_${encounterId}`, audioBlob ? 'backend_asr_pending' : 'browser_preview_no_audio');
@@ -316,7 +334,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     // starts clinical analysis as soon as the canonical result is available.
     router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
     if (audioBlob) {
-      transcribeAndPersist(audioBlob, mimeTypeRef.current, typedText);
+      transcribeAndPersist(audioBlob, mimeTypeRef.current, typedText, requestId);
     }
   };
 
@@ -324,12 +342,15 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     const file = e.target.files?.[0];
     if (e.target.value) e.target.value = '';
     if (!file) return;
+    stopLiveCapture();
     setIsRecording(false);
     isStoppedRef.current = true;
     setIsProcessing(true);
     const mimeType = file.type || 'audio/webm';
     const emptyText = '';
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     if (typeof window !== 'undefined') {
+      localStorage.setItem(`pvs_asr_request_${encounterId}`, requestId);
       localStorage.setItem(`pvs_transcript_${encounterId}`, emptyText);
       localStorage.setItem('pvs_transcript_latest', emptyText);
       localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'backend_asr_pending');
@@ -343,7 +364,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     }
     setUploadedFileName(file.name);
     router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
-    transcribeAndPersist(file, mimeType, emptyText);
+    transcribeAndPersist(file, mimeType, emptyText, requestId);
   };
 
   return (

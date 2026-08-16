@@ -101,9 +101,12 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
       }
 
       const loadTranscriptState = () => {
-        const savedTranscript =
-          localStorage.getItem(`pvs_transcript_${encounterId}`) ||
-          localStorage.getItem('pvs_transcript_latest');
+        const encounterTranscript = localStorage.getItem(`pvs_transcript_${encounterId}`);
+        // An intentionally empty encounter transcript (for an uploaded file)
+        // must not fall back to a previous live-recording transcript.
+        const savedTranscript = encounterTranscript !== null
+          ? encounterTranscript
+          : localStorage.getItem('pvs_transcript_latest');
         const savedSource = localStorage.getItem(`pvs_transcript_source_${encounterId}`) || 'unknown';
         setTranscriptSource(savedSource);
         if (savedTranscript !== null) setRawTranscript(savedTranscript);
