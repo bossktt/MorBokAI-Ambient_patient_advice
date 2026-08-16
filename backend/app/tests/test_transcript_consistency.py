@@ -11,6 +11,8 @@ from app.services.asr_service import (
     assess_dual_transcript_quality,
     assess_transcript_quality,
     deduplicate_repeated_sentences,
+    detect_audio_file,
+    ensure_wav_bytes,
 )
 from app.services.llm_adapter import ground_summary_to_transcript
 
@@ -19,6 +21,16 @@ client = TestClient(app)
 
 
 class TestTranscriptConsistency(unittest.TestCase):
+    def test_detect_m4a_magic_bytes(self):
+        fake_m4a = b"\x00\x00\x00\x20ftypM4A " + b"\x00" * 100
+        self.assertEqual(detect_audio_file(fake_m4a), ("audio.m4a", "audio/mp4"))
+        self.assertEqual(ensure_wav_bytes(fake_m4a), fake_m4a)
+
+    def test_detect_webm_magic_bytes(self):
+        fake_webm = b"\x1aE\xdf\xa3" + b"\x00" * 100
+        self.assertEqual(detect_audio_file(fake_webm), ("audio.webm", "audio/webm"))
+        self.assertEqual(ensure_wav_bytes(fake_webm), fake_webm)
+
     def test_dual_asr_requires_agreement_on_critical_tokens(self):
         accepted = assess_dual_transcript_quality(
             "แพทย์ปรับยา Metformin เป็น 1000 mg หลังอาหาร",

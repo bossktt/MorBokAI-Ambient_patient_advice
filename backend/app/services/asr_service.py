@@ -375,6 +375,26 @@ def _no_result_quality() -> dict:
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
     }
 
+def detect_audio_file(audio_bytes: bytes):
+    """Guess (filename, content_type) from the file magic bytes."""
+    if not audio_bytes or len(audio_bytes) < 12:
+        return None
+    # MP4/M4A: 4-byte size box followed by 'ftyp'
+    if audio_bytes[4:8] == b'ftyp':
+        return "audio.m4a", "audio/mp4"
+    if audio_bytes[:4] == b'\x1aE\xdf\xa3':
+        return "audio.webm", "audio/webm"
+    if audio_bytes[:4] == b'OggS':
+        return "audio.ogg", "audio/ogg"
+    if audio_bytes[:4] == b'fLaC':
+        return "audio.flac", "audio/flac"
+    if audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
+        return "audio.wav", "audio/wav"
+    if audio_bytes[:3] == b'ID3' or (audio_bytes[0] == 0xFF and (audio_bytes[1] & 0xE0) == 0xE0):
+        return "audio.mp3", "audio/mpeg"
+    return None
+
+
 def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """
     Ensures binary audio data starts with a valid WAV header (RIFF...WAVE).
@@ -387,9 +407,9 @@ def ensure_wav_bytes(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     if audio_bytes[:4] == b'RIFF' and audio_bytes[8:12] == b'WAVE':
         return audio_bytes
 
-    # If it's a compressed container (WebM/MP4/Opus from MediaRecorder),
-    # do NOT fake a WAV header — whisper can decode these natively.
-    if audio_bytes[:4] in (b'\x1aE\xdf\xa3', b'ftyp', b'OggS', b'\xff\xf1', b'\xff\xf9'):
+    # If it's a compressed container (WebM/MP4/Opus/MP3/OGG/FLAC from upload),
+    # do NOT fake a WAV header — the ASR model can decode these natively.
+    if detect_audio_file(audio_bytes):
         return audio_bytes
 
     num_samples = len(audio_bytes) // 2
@@ -546,15 +566,27 @@ class MultiTierASRService:
 
         wav_bytes = ensure_wav_bytes(audio_bytes, sample_rate)
 
-        # Map mimeType -> (filename, content_type) for the ASR API
-        mime_to_file = {
-            "audio/webm": ("audio.webm", "audio/webm"),
-            "audio/mp4": ("audio.m4a", "audio/mp4"),
-            "audio/aac": ("audio.aac", "audio/aac"),
-            "audio/wav": ("audio.wav", "audio/wav"),
-            "audio/x-wav": ("audio.wav", "audio/wav"),
-        }
-        filename, content_type = mime_to_file.get(mime_type, ("audio.webm", "audio/webm"))
+        # Prefer the real container detected from magic bytes over the client
+        # content-type (browsers label .m4a inconsistently: audio/mp4, audio/m4a,
+        # audio/x-m4a, or empty).
+        detected = detect_audio_file(audio_bytes)
+        if detected:
+            filename, content_type = detected
+        else:
+            mime_to_file = {
+                "audio/webm": ("audio.webm", "audio/webm"),
+                "audio/mp4": ("audio.m4a", "audio/mp4"),
+                "audio/m4a": ("audio.m4a", "audio/mp4"),
+                "audio/x-m4a": ("audio.m4a", "audio/mp4"),
+                "audio/aac": ("audio.aac", "audio/aac"),
+                "audio/mpeg": ("audio.mp3", "audio/mpeg"),
+                "audio/mp3": ("audio.mp3", "audio/mpeg"),
+                "audio/ogg": ("audio.ogg", "audio/ogg"),
+                "audio/flac": ("audio.flac", "audio/flac"),
+                "audio/wav": ("audio.wav", "audio/wav"),
+                "audio/x-wav": ("audio.wav", "audio/wav"),
+            }
+            filename, content_type = mime_to_file.get(mime_type, ("audio.webm", "audio/webm"))
 
         # =========================================================================
         # STEP 1: Parallel primary/verifier ASR - OpenRouter Audio Transcriptions
