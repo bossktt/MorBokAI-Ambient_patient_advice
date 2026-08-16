@@ -31,7 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; agreement_score?: number; agreement_threshold?: number } | null }>({ status: 'UNKNOWN' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null }>({ status: 'UNKNOWN' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -53,6 +53,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const asrDecision = asrResult.quality?.decision;
   const hasModelDisagreement = asrResult.quality?.reasons?.includes('model_disagreement') || asrDecision === 'REVIEW_DISAGREEMENT';
   const hasSingleModelOnly = asrResult.quality?.reasons?.includes('single_model_only') || asrDecision === 'REVIEW_SINGLE_MODEL';
+  const hasLowAgreement = asrResult.quality?.warnings?.includes('low_model_agreement') || asrDecision === 'ACCEPT_LOW_AGREEMENT';
   const asrStatusText =
     asrDecision === 'NO_RESULT'
       ? 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้'
@@ -62,15 +63,17 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
           ? 'มีผลจาก ASR เพียงโมเดลเดียว ต้องตรวจสอบ'
           : asrDecision === 'REVIEW_LOW_QUALITY'
             ? 'เสียงไม่ชัดพอ ต้องตรวจสอบข้อความ'
-            : asrResult.status === 'SUCCESS'
-              ? 'ถอดเสียงเรียบร้อย'
-              : asrResult.status === 'PROCESSING'
-                ? 'กำลังถอดเสียงจากไฟล์บันทึก'
-                : asrResult.status === 'QUALITY_FAILED'
-                  ? 'เสียงไม่ชัดพอ ต้องตรวจสอบข้อความ'
-                  : asrResult.status === 'NO_AUDIO'
-                    ? 'ไม่พบไฟล์เสียง'
-                    : 'ต้องตรวจสอบการถอดเสียง';
+            : asrDecision === 'ACCEPT_LOW_AGREEMENT'
+              ? 'ถอดเสียงเรียบร้อย (2 โมเดลต่างกันเล็กน้อย)'
+              : asrResult.status === 'SUCCESS'
+                ? 'ถอดเสียงเรียบร้อย'
+                : asrResult.status === 'PROCESSING'
+                  ? 'กำลังถอดเสียงจากไฟล์บันทึก'
+                  : asrResult.status === 'QUALITY_FAILED'
+                    ? 'เสียงไม่ชัดพอ ต้องตรวจสอบข้อความ'
+                    : asrResult.status === 'NO_AUDIO'
+                      ? 'ไม่พบไฟล์เสียง'
+                      : 'ต้องตรวจสอบการถอดเสียง';
 
   const [isGeneratingLLM, setIsGeneratingLLM] = useState(false);
   const [diagnosisError, setDiagnosisError] = useState(false);
@@ -108,7 +111,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         }
 
         const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
-        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; agreement_score?: number; agreement_threshold?: number } | null } | null = null;
+        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null } | null = null;
         if (savedAsrResult) {
           try {
             parsedAsrResult = JSON.parse(savedAsrResult);
@@ -398,7 +401,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
             rows={6}
               placeholder="ไม่พบต้นฉบับถอดเสียง"
             />
-          {hasModelDisagreement && asrResult.alternatives?.verifier && (
+          {(hasModelDisagreement || hasLowAgreement) && asrResult.alternatives?.verifier && (
             <div className="rounded-xl border border-[#B06000]/40 bg-[#FEF7E0] p-3 space-y-2">
               <div className="text-xs font-bold text-[#8A4B00]">
                 ผลจาก Verifier ({asrResult.quality?.agreement_score ?? 0} เทียบเกณฑ์ {asrResult.quality?.agreement_threshold ?? 0.85})

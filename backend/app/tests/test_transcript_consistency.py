@@ -39,6 +39,15 @@ class TestTranscriptConsistency(unittest.TestCase):
         )
         self.assertEqual(result["critical_disagreement"], [])
 
+    def test_low_agreement_without_critical_difference_is_accepted(self):
+        result = assess_dual_transcript_quality(
+            "ให้พักผ่อนมาก ๆ และทานยาตามเวลา",
+            "หมอสั่งให้พักผ่อนและทานยาตามกำหนดเวลา",
+        )
+        self.assertEqual(result["critical_disagreement"], [])
+        self.assertEqual(result["status"], "ACCEPT")
+        self.assertIn(result["decision"], ("ACCEPT", "ACCEPT_LOW_AGREEMENT"))
+
     def test_repeated_asr_sentence_is_kept_once(self):
         repeated = "แพทย์บอกให้พักผ่อนที่บ้าน แพทย์บอกให้พักผ่อนที่บ้าน"
         self.assertEqual(deduplicate_repeated_sentences(repeated), "แพทย์บอกให้พักผ่อนที่บ้าน")

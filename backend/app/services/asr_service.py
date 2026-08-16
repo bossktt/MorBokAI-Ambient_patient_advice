@@ -103,6 +103,7 @@ CLINICAL_UNITS = {
     "mg", "มิลลิกรัม", "มก", "กรัม", "เม็ด", "แคปซูล", "แคป", "ช้อน",
     "ช้อนชา", "ช้อนโต๊ะ", "วันละ", "ครั้งละ", "ก่อนนอน", "หลังอาหาร",
     "เช้า", "เย็น", "กลางวัน", "ชั่วโมง", "วัน", "สัปดาห์", "อาทิตย์",
+    "ก่อน", "นอน", "ครั้ง",
 }
 
 THAI_NUMBER_WORDS = {
@@ -165,10 +166,9 @@ def _extract_clinical_entities(text: str) -> set:
     entities.update(re.findall(r"\d+(?:[.,]\d+)?", text))
     entities.update(re.findall(r"[๐-๙]+", text))
     entities.update(m.casefold() for m in re.findall(r"[a-z][a-z0-9\-]{1,}", text.casefold()))
-    lowered = text.casefold()
-    for unit in CLINICAL_UNITS:
-        if unit in lowered:
-            entities.add(unit)
+    for token in _thai_word_tokenize(text):
+        if token in CLINICAL_UNITS:
+            entities.add(token)
     for word in THAI_NUMBER_WORDS:
         if word in text:
             entities.add(word)
@@ -298,16 +298,21 @@ def assess_dual_transcript_quality(
     primary_quality = assess_transcript_quality(primary, primary_confidence)
     verifier_quality = assess_transcript_quality(verifier, verifier_confidence)
     agreement = compare_transcripts(primary, verifier)
+    min_agreement = getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85)
+    soft_floor = getattr(settings, "ASR_MIN_AGREEMENT_SOFT_ACCEPT", 0.65)
     score = min(primary_quality["score"], verifier_quality["score"], agreement["score"])
     reasons = []
+    warnings = []
     if primary_quality["status"] != "ACCEPT":
         reasons.append("primary_quality_rejected")
     if verifier_quality["status"] != "ACCEPT":
         reasons.append("verifier_quality_rejected")
-    if not agreement["agrees"]:
+    if agreement["critical_disagreement"]:
+        reasons.append("critical_token_disagreement")
+    elif agreement["score"] < soft_floor:
         reasons.append("model_disagreement")
-        if agreement["critical_disagreement"]:
-            reasons.append("critical_token_disagreement")
+    elif agreement["score"] < min_agreement:
+        warnings.append("low_model_agreement")
 
     score = round(max(0.0, min(1.0, score)), 3)
     grade, grade_label = _quality_grade(score)
@@ -316,7 +321,7 @@ def assess_dual_transcript_quality(
         reasons.append("quality_score_below_threshold")
 
     if status == "ACCEPT":
-        decision = "ACCEPT"
+        decision = "ACCEPT_LOW_AGREEMENT" if warnings else "ACCEPT"
     elif "model_disagreement" in reasons or "critical_token_disagreement" in reasons:
         decision = "REVIEW_DISAGREEMENT"
     else:
@@ -331,6 +336,7 @@ def assess_dual_transcript_quality(
         "confidence": primary_quality.get("confidence"),
         "dictionary_coverage": primary_quality.get("dictionary_coverage"),
         "reasons": reasons,
+        "warnings": warnings,
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
         "agreement_score": agreement["score"],
         "agreement_threshold": agreement["threshold"],

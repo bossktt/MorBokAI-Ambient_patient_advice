@@ -19,6 +19,8 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
   const [transcript, setTranscript] = useState<string>('');
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string } | null>(null);
   const [asrError, setAsrError] = useState<string>('');
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -214,6 +216,62 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     return `${m}:${s}`;
   };
 
+  const transcribeAndPersist = (blob: Blob, mimeType: string, fallbackText: string) => {
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': mimeType,
+            'X-Encounter-Id': encounterId,
+          },
+          body: blob,
+        });
+        if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
+        const data = await res.json();
+        const hasTranscript = data.status === 'SUCCESS' && data.transcript && data.transcript.trim();
+        const accepted = hasTranscript && data.quality?.status === 'ACCEPT';
+        const finalTranscript = hasTranscript
+          ? deduplicateRepeatedSentences(data.transcript.trim())
+          : fallbackText;
+        const decision = data.quality?.decision;
+        const error = accepted
+          ? null
+          : decision === 'NO_RESULT'
+            ? data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป'
+            : decision === 'REVIEW_DISAGREEMENT'
+              ? 'ผลถอดเสียงจาก 2 โมเดลไม่ตรงกัน กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
+              : decision === 'REVIEW_SINGLE_MODEL'
+                ? 'มีผลถอดเสียงเพียงโมเดลเดียว กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
+                : data.quality?.grade_label
+                  ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
+                  : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+        localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
+        localStorage.setItem('pvs_transcript_latest', finalTranscript);
+        localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
+        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+          status: accepted ? 'SUCCESS' : (hasTranscript ? 'QUALITY_FAILED' : 'FAILED'),
+          provider: data.provider || null,
+          model: data.model || null,
+          error,
+          quality: data.quality || null,
+          alternatives: data.alternatives || null,
+        }));
+      } catch (e) {
+        console.warn('Backend transcription failed:', e);
+        localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'browser_preview_after_asr_failure');
+        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+          status: 'FAILED',
+          provider: null,
+          model: null,
+          error: 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป',
+          quality: null,
+          alternatives: null,
+        }));
+      }
+    })();
+  };
+
   const handleStopScribe = async () => {
     setIsRecording(false);
     isStoppedRef.current = true;
@@ -257,61 +315,35 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     // Move to Screen 4 now. ASR continues in the background and Screen 4
     // starts clinical analysis as soon as the canonical result is available.
     router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
-    if (!audioBlob) return;
+    if (audioBlob) {
+      transcribeAndPersist(audioBlob, mimeTypeRef.current, typedText);
+    }
+  };
 
-    void (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/v1/encounters/transcribe-audio`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': mimeTypeRef.current,
-            'X-Encounter-Id': encounterId,
-          },
-          body: audioBlob,
-        });
-        if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
-        const data = await res.json();
-        const hasTranscript = data.status === 'SUCCESS' && data.transcript && data.transcript.trim();
-        const accepted = hasTranscript && data.quality?.status === 'ACCEPT';
-        const finalTranscript = hasTranscript
-          ? deduplicateRepeatedSentences(data.transcript.trim())
-          : typedText;
-        const decision = data.quality?.decision;
-        const error = accepted
-          ? null
-          : decision === 'NO_RESULT'
-            ? data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป'
-            : decision === 'REVIEW_DISAGREEMENT'
-              ? 'ผลถอดเสียงจาก 2 โมเดลไม่ตรงกัน กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
-              : decision === 'REVIEW_SINGLE_MODEL'
-                ? 'มีผลถอดเสียงเพียงโมเดลเดียว กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
-                : data.quality?.grade_label
-                  ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
-                  : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
-        localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
-        localStorage.setItem('pvs_transcript_latest', finalTranscript);
-        localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
-        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
-          status: accepted ? 'SUCCESS' : (hasTranscript ? 'QUALITY_FAILED' : 'FAILED'),
-          provider: data.provider || null,
-          model: data.model || null,
-          error,
-          quality: data.quality || null,
-          alternatives: data.alternatives || null,
-        }));
-      } catch (e) {
-        console.warn('Backend transcription failed:', e);
-        localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'browser_preview_after_asr_failure');
-        localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
-          status: 'FAILED',
-          provider: null,
-          model: null,
-          error: 'การเชื่อมต่อบริการถอดเสียงล้มเหลว กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป',
-          quality: null,
-          alternatives: null,
-        }));
-      }
-    })();
+  const handleUploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target.value) e.target.value = '';
+    if (!file) return;
+    setIsRecording(false);
+    isStoppedRef.current = true;
+    setIsProcessing(true);
+    const mimeType = file.type || 'audio/webm';
+    const emptyText = '';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`pvs_transcript_${encounterId}`, emptyText);
+      localStorage.setItem('pvs_transcript_latest', emptyText);
+      localStorage.setItem(`pvs_transcript_source_${encounterId}`, 'backend_asr_pending');
+      localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
+        status: 'PROCESSING',
+        provider: null,
+        model: null,
+        error: null,
+        quality: null,
+      }));
+    }
+    setUploadedFileName(file.name);
+    router.push(`/doctor/encounter/${encounterId}/review?model=${model}`);
+    transcribeAndPersist(file, mimeType, emptyText);
   };
 
   return (
@@ -412,7 +444,24 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
 
       {/* Bottom Floating Control Bar with Pause Button */}
       <footer className="fixed bottom-0 w-full z-50 rounded-t-2xl bg-white shadow-[0_-4px_16px_rgba(0,51,102,0.1)] border-t border-[#C3C6D1] py-3 px-4">
-        <div className="flex items-center justify-center max-w-[480px] mx-auto">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*,.webm,.mp3,.mp4,.m4a,.wav,.ogg,.aac,.flac"
+          className="hidden"
+          onChange={handleUploadFile}
+        />
+        <div className="flex flex-col gap-2 max-w-[480px] mx-auto">
+          {/* Test with Uploaded Audio File */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isProcessing}
+            className="w-full py-2.5 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all cursor-pointer shadow-sm bg-[#eef2ff] text-[#003366] border-[#003366]/30 hover:bg-[#e0e7ff] disabled:opacity-40"
+          >
+            <span className="material-symbols-outlined text-xl">upload_file</span>
+            <span>{uploadedFileName ? `ถอดเสียงจากไฟล์: ${uploadedFileName}` : 'ทดสอบด้วยไฟล์เสียง (อัปโหลด)'}</span>
+          </button>
           {/* Pause / Resume Button */}
           <button
             type="button"
