@@ -31,7 +31,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const [isExporting, setIsExporting] = useState(false);
   const [rawTranscript, setRawTranscript] = useState<string>('');
   const [transcriptSource, setTranscriptSource] = useState<string>('');
-  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null }>({ status: 'UNKNOWN' });
+  const [asrResult, setAsrResult] = useState<{ status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string; browser_preview?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null }>({ status: 'UNKNOWN' });
   const [doctorInfo, setDoctorInfo] = useState<{ first_name: string; surname: string; license_no: string }>({
     first_name: 'วินัย',
     surname: 'ให้คำแนะนำ',
@@ -54,6 +54,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
   const hasModelDisagreement = asrResult.quality?.reasons?.includes('model_disagreement') || asrDecision === 'REVIEW_DISAGREEMENT';
   const hasSingleModelOnly = asrResult.quality?.reasons?.includes('single_model_only') || asrDecision === 'REVIEW_SINGLE_MODEL';
   const hasLowAgreement = asrResult.quality?.warnings?.includes('low_model_agreement') || asrDecision === 'ACCEPT_LOW_AGREEMENT';
+  const hasUnverifiedCandidate = asrResult.status === 'QUALITY_FAILED' && Boolean(asrResult.alternatives?.primary);
   const asrStatusText =
     asrDecision === 'NO_RESULT'
       ? 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้'
@@ -116,7 +117,7 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
         }
 
         const savedAsrResult = localStorage.getItem(`pvs_asr_result_${encounterId}`);
-        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null } | null = null;
+        let parsedAsrResult: { status: string; provider?: string | null; model?: string | null; error?: string | null; alternatives?: { primary?: string; verifier?: string; browser_preview?: string } | null; quality?: { status?: string; decision?: string; score?: number; threshold?: number; grade?: string; grade_label?: string; reasons?: string[]; warnings?: string[]; agreement_score?: number; agreement_threshold?: number } | null } | null = null;
         if (savedAsrResult) {
           try {
             parsedAsrResult = JSON.parse(savedAsrResult);
@@ -403,9 +404,29 @@ export default function ReviewEncounterPage({ params }: { params: Promise<{ id: 
               value={rawTranscript}
             onChange={(e) => setRawTranscript(e.target.value)}
             className="w-full rounded-xl border border-[#C3C6D1] bg-[#F0F3FF] p-3 text-xs leading-relaxed text-[#111C2C]"
-            rows={6}
+              rows={6}
               placeholder="ไม่พบต้นฉบับถอดเสียง"
             />
+          {hasUnverifiedCandidate && (
+            <div className="rounded-xl border border-[#BA1A1A]/40 bg-[#FFF0F0] p-3 space-y-2">
+              <div className="text-xs font-bold text-[#8A0000]">
+                ข้อความจาก ASR ที่ยังไม่ยืนยัน (ไม่ใช่ต้นฉบับที่เชื่อถือได้)
+              </div>
+              <textarea
+                readOnly
+                value={asrResult.alternatives?.primary || ''}
+                className="w-full rounded-xl border border-[#BA1A1A]/30 bg-white p-3 text-xs leading-relaxed text-[#111C2C]"
+                rows={4}
+              />
+              <button
+                type="button"
+                onClick={() => setRawTranscript(asrResult.alternatives?.primary || '')}
+                className="rounded-xl border border-[#8A0000] px-3 py-2 text-xs font-bold text-[#8A0000] hover:bg-[#FFE2E2]"
+              >
+                ใช้เป็นร่างเพื่อแก้ไขด้วยตนเอง
+              </button>
+            </div>
+          )}
           {(hasModelDisagreement || hasLowAgreement) && asrResult.alternatives?.verifier && (
             <div className="rounded-xl border border-[#B06000]/40 bg-[#FEF7E0] p-3 space-y-2">
               <div className="text-xs font-bold text-[#8A4B00]">

@@ -231,9 +231,12 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         const data = await res.json();
         const hasTranscript = data.status === 'SUCCESS' && data.transcript && data.transcript.trim();
         const accepted = hasTranscript && data.quality?.status === 'ACCEPT';
-        const finalTranscript = hasTranscript
+        const candidateTranscript = hasTranscript
           ? deduplicateRepeatedSentences(data.transcript.trim())
-          : fallbackText;
+          : '';
+        // A rejected ASR result is only a candidate. Never make it the
+        // canonical transcript or let Screen 4 send it to the LLM.
+        const finalTranscript = accepted ? candidateTranscript : '';
         const decision = data.quality?.decision;
         const error = accepted
           ? null
@@ -247,6 +250,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
                   ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
                   : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
         if (localStorage.getItem(`pvs_asr_request_${encounterId}`) !== requestId) return;
+        const alternatives = {
+          primary: candidateTranscript || data.alternatives?.primary || '',
+          verifier: data.alternatives?.verifier || '',
+          browser_preview: accepted ? '' : fallbackText,
+        };
         localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
         localStorage.setItem('pvs_transcript_latest', finalTranscript);
         localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
@@ -256,7 +264,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           model: data.model || null,
           error,
           quality: data.quality || null,
-          alternatives: data.alternatives || null,
+          alternatives: hasTranscript || data.alternatives ? alternatives : null,
         }));
       } catch (e) {
         console.warn('Backend transcription failed:', e);
