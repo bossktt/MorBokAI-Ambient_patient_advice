@@ -106,6 +106,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
           mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
+            if (isStoppedRef.current) return;
             if (event.data.size > 0) {
               chunksRef.current.push(event.data);
               setDebugInfo((d) => `${d}\n🎤 chunks=${chunksRef.current.length}`);
@@ -133,7 +134,7 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
       recognition.maxAlternatives = 1;
 
       recognition.onresult = (event: any) => {
-        if (isPausedRef.current) return;
+        if (isPausedRef.current || isStoppedRef.current) return;
         let currentTranscript = '';
         for (let i = 0; i < event.results.length; i++) {
           currentTranscript += event.results[i][0].transcript + ' ';
@@ -326,9 +327,11 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     const file = e.target.files?.[0];
     if (e.target.value) e.target.value = '';
     if (!file) return;
+    // The uploaded file is the only audio source: stop and ignore the
+    // microphone immediately (guards in the mic handlers use isStoppedRef).
+    isStoppedRef.current = true;
     stopLiveCapture();
     setIsRecording(false);
-    isStoppedRef.current = true;
     setIsProcessing(true);
     const mimeType = file.type || 'audio/webm';
     const emptyText = '';
