@@ -324,9 +324,10 @@ def assess_dual_transcript_quality(
     primary_confidence: Optional[float] = None,
     verifier_confidence: Optional[float] = None,
 ) -> dict:
-    """The primary transcript is canonical. The verifier may veto ONLY when the
-    verifier itself is usable AND disagrees on numbers (dosage). A low-quality
-    verifier (garbage/short) or a wording-only difference never blocks."""
+    """The primary is canonical, but a coherent hallucination (e.g. on a silent
+    or video-only clip) must never auto-enter the clinical pipeline. We require
+    the verifier to corroborate; disagreement on numbers or a large length gap
+    forces doctor review instead of auto-accept."""
     primary_quality = assess_transcript_quality(primary, primary_confidence)
     verifier_quality = assess_transcript_quality(verifier, verifier_confidence)
     agreement = compare_transcripts(primary, verifier)
@@ -335,17 +336,23 @@ def assess_dual_transcript_quality(
     warnings = []
     if primary_quality["status"] != "ACCEPT":
         reasons.append("primary_quality_rejected")
-    # The verifier is advisory only: it surfaces disagreements as warnings and
-    # feeds the comparison panel, but never blocks the canonical primary.
     if verifier_quality["status"] != "ACCEPT":
-        warnings.append("verifier_quality_low")
-    if agreement["numeric_disagreement"]:
-        warnings.append("numeric_disagreement")
-        warnings.extend(agreement["numeric_disagreement"])
-    if agreement["non_numeric_disagreement"]:
-        warnings.append("non_numeric_disagreement")
-    if agreement["score"] < min_agreement:
-        warnings.append("low_model_agreement")
+        # Cannot corroborate the primary: possible hallucination. Doctor review.
+        reasons.append("verifier_unavailable_or_poor")
+        warnings.append("possible_hallucination")
+    else:
+        primary_len = max(len(re.sub(r"\s+", "", primary or "")), 1)
+        verifier_len = max(len(re.sub(r"\s+", "", verifier or "")), 1)
+        if max(primary_len, verifier_len) / min(primary_len, verifier_len) > 3.0:
+            reasons.append("transcript_length_disagreement")
+            warnings.append("possible_hallucination")
+        if agreement["numeric_disagreement"]:
+            warnings.append("numeric_disagreement")
+            warnings.extend(agreement["numeric_disagreement"])
+        if agreement["non_numeric_disagreement"]:
+            warnings.append("non_numeric_disagreement")
+        if agreement["score"] < min_agreement:
+            warnings.append("low_model_agreement")
 
     score = min(primary_quality["score"], verifier_quality["score"], agreement["score"])
     score = round(max(0.0, min(1.0, score)), 3)
@@ -362,6 +369,8 @@ def assess_dual_transcript_quality(
         decision = "ACCEPT_LOW_AGREEMENT" if warnings else "ACCEPT"
     elif "primary_quality_rejected" in reasons:
         decision = "REVIEW_LOW_QUALITY"
+    elif "verifier_unavailable_or_poor" in reasons:
+        decision = "REVIEW_SINGLE_MODEL"
     else:
         decision = "REVIEW_DISAGREEMENT"
 
@@ -391,22 +400,19 @@ def assess_dual_transcript_quality(
 
 
 def mark_single_model_quality(quality: dict, missing_model: Optional[str] = None) -> dict:
-    """When only one model produced a transcript: accept a usable one (with a
-    warning) instead of blocking, since the verifier may be unreliable/timeout."""
+    """With only one model's transcript we cannot rule out a coherent
+    hallucination, so it must be reviewed by the doctor before the LLM runs."""
     quality = dict(quality)
-    quality["reasons"] = list(quality.get("reasons") or [])
-    quality["warnings"] = list(quality.get("warnings") or [])
-    if missing_model:
-        quality["models"] = {"missing": missing_model}
-    if quality["status"] == "ACCEPT":
-        quality["decision"] = "ACCEPT_VERIFIER_UNAVAILABLE"
-        if "verifier_unavailable" not in quality["warnings"]:
-            quality["warnings"].append("verifier_unavailable")
-        return quality
     quality["status"] = "REJECT"
     quality["decision"] = "REVIEW_SINGLE_MODEL"
+    quality["reasons"] = list(quality.get("reasons") or [])
+    quality["warnings"] = list(quality.get("warnings") or [])
     if "single_model_only" not in quality["reasons"]:
         quality["reasons"].append("single_model_only")
+    if "possible_hallucination" not in quality["warnings"]:
+        quality["warnings"].append("possible_hallucination")
+    if missing_model:
+        quality["models"] = {"missing": missing_model}
     return quality
 
 

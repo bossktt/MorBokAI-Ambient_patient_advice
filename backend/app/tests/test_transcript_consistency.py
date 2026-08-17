@@ -45,6 +45,17 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(numeric_diff["status"], "ACCEPT")
         self.assertIn("numeric_disagreement", numeric_diff["warnings"])
 
+    def test_length_gap_forces_review(self):
+        result = assess_dual_transcript_quality(
+            "หมอขอปรับเพิ่มยา Metformin เป็น 1000 mg เช้าเย็น หลังอาหารทันที "
+            "แล้วให้ทิ้งยาตัวสีขาวเดิมซองเก่าทันทีเลยนะ ส่วนยาลดความดัน Amlodipine "
+            "ให้ปรับลดเหลือ 1 เม็ดก่อนนอน นัดติดตามอาการคลินิกอายุรกรรมหัวใจ "
+            "วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 9:00 น.",
+            "หมอสั่งยาครับ",
+        )
+        self.assertEqual(result["status"], "REJECT")
+        self.assertEqual(result["decision"], "REVIEW_DISAGREEMENT")
+
     def test_poor_primary_transcript_is_rejected(self):
         result = assess_dual_transcript_quality(
             "!!!! ????? ....",
@@ -52,6 +63,15 @@ class TestTranscriptConsistency(unittest.TestCase):
         )
         self.assertEqual(result["status"], "REJECT")
         self.assertIn("primary_quality_rejected", result["reasons"])
+
+    def test_missing_verifier_requires_review(self):
+        result = assess_dual_transcript_quality(
+            "แพทย์บอกให้พักผ่อนที่บ้าน",
+            "!!!! ????? ....",
+        )
+        self.assertEqual(result["status"], "REJECT")
+        self.assertEqual(result["decision"], "REVIEW_SINGLE_MODEL")
+        self.assertIn("verifier_unavailable_or_poor", result["reasons"])
 
     def test_synonyms_and_fillers_do_not_block_agreement(self):
         result = assess_dual_transcript_quality(
