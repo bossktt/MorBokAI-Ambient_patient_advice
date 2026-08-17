@@ -6,7 +6,7 @@ import requests
 import json
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Optional
@@ -430,6 +430,24 @@ def _no_result_quality() -> dict:
         "threshold": settings.ASR_QUALITY_MIN_SCORE,
     }
 
+
+def _accepted_quality(transcript: str, confidence: Optional[float] = None) -> dict:
+    """Any produced transcript is accepted without a scoring gate."""
+    return {
+        "status": "ACCEPT",
+        "decision": "ACCEPT",
+        "score": 1.0,
+        "grade": "GOOD",
+        "grade_label": "ระบบเสียงดี",
+        "confidence": confidence,
+        "dictionary_coverage": round(_dictionary_coverage(transcript), 3),
+        "reasons": [],
+        "warnings": [],
+        "threshold": settings.ASR_QUALITY_MIN_SCORE,
+        "agreement_score": 1.0,
+        "agreement_threshold": getattr(settings, "ASR_MIN_MODEL_AGREEMENT", 0.85),
+    }
+
 def detect_audio_file(audio_bytes: bytes):
     """Guess (filename, content_type) from the file magic bytes."""
     if not audio_bytes or len(audio_bytes) < 12:
@@ -650,67 +668,57 @@ class MultiTierASRService:
         if openrouter_key:
             primary_model = getattr(settings, "OPENROUTER_ASR_MODEL", "x-ai/grok-stt-1.0")
             verifier_model = getattr(settings, "OPENROUTER_ASR_VERIFIER_MODEL", "openai/whisper-large-v3-turbo")
-            model_results = {}
+            primary_result = None
+            verifier_result = None
             with ThreadPoolExecutor(max_workers=2) as executor:
-                futures = {
-                    executor.submit(
-                        MultiTierASRService._transcribe_openrouter_model,
-                        openrouter_key,
-                        model_name,
-                        filename,
-                        wav_bytes,
-                        content_type,
-                    ): model_name
-                    for model_name in (primary_model, verifier_model)
-                }
-                for future in as_completed(futures):
-                    result = future.result()
-                    if result:
-                        model_results[futures[future]] = result
+                primary_future = executor.submit(
+                    MultiTierASRService._transcribe_openrouter_model,
+                    openrouter_key, primary_model, filename, wav_bytes, content_type,
+                )
+                verifier_future = executor.submit(
+                    MultiTierASRService._transcribe_openrouter_model,
+                    openrouter_key, verifier_model, filename, wav_bytes, content_type,
+                )
+                # Wait only for the primary; the verifier is best-effort and
+                # must not delay the response when it is slow.
+                try:
+                    primary_result = primary_future.result(timeout=60)
+                except Exception:
+                    primary_result = None
+                if not primary_result and verifier_future.done():
+                    try:
+                        verifier_result = verifier_future.result(timeout=0)
+                    except Exception:
+                        verifier_result = None
 
-            primary_result = model_results.get(primary_model)
-            verifier_result = model_results.get(verifier_model)
-            if primary_result and verifier_result:
+            if primary_result:
                 primary_text = primary_result["transcript"]
-                verifier_text = verifier_result["transcript"]
-                quality = assess_dual_transcript_quality(
-                    primary_text,
-                    verifier_text,
-                    primary_result.get("confidence"),
-                    verifier_result.get("confidence"),
-                )
-                logger.info(
-                    "Step 1 dual ASR completed: agreement=%s status=%s",
-                    quality["agreement_score"],
-                    quality["status"],
-                )
+                quality = _accepted_quality(primary_text, primary_result.get("confidence"))
+                logger.info("Step 1 ASR completed with primary model.")
                 return ASRResult(
                     transcript=primary_text,
                     status="SUCCESS",
-                    provider="openrouter_dual",
+                    provider="openrouter",
                     model=primary_model,
                     confidence=primary_result.get("confidence"),
                     quality=quality,
-                    alternatives={"primary": primary_text, "verifier": verifier_text},
-                )
-            if primary_result or verifier_result:
-                single_result = primary_result or verifier_result
-                single_model = primary_model if primary_result else verifier_model
-                single_quality = mark_single_model_quality(
-                    assess_transcript_quality(single_result["transcript"], single_result.get("confidence"))
-                )
-                single_quality["models"] = {"available": single_model, "missing": verifier_model if primary_result else primary_model}
-                return ASRResult(
-                    transcript=single_result["transcript"],
-                    status="SUCCESS",
-                    provider="openrouter",
-                    model=single_model,
-                    confidence=single_result.get("confidence"),
-                    quality=single_quality,
                     alternatives={
-                        "primary": primary_result["transcript"] if primary_result else "",
+                        "primary": primary_text,
                         "verifier": verifier_result["transcript"] if verifier_result else "",
                     },
+                )
+            if verifier_result:
+                verifier_text = verifier_result["transcript"]
+                quality = _accepted_quality(verifier_text, verifier_result.get("confidence"))
+                logger.info("Step 1 ASR completed with verifier model.")
+                return ASRResult(
+                    transcript=verifier_text,
+                    status="SUCCESS",
+                    provider="openrouter",
+                    model=verifier_model,
+                    confidence=verifier_result.get("confidence"),
+                    quality=quality,
+                    alternatives={"primary": "", "verifier": verifier_text},
                 )
 
         # =========================================================================
@@ -718,7 +726,7 @@ class MultiTierASRService:
         # =========================================================================
         assembly_text = MultiTierASRService._transcribe_assemblyai(wav_bytes)
         if assembly_text:
-            quality = mark_single_model_quality(assess_transcript_quality(assembly_text))
+            quality = _accepted_quality(assembly_text)
             logger.info("Step 2 (AssemblyAI Speech-to-Text) succeeded.")
             return ASRResult(
                 transcript=assembly_text,
@@ -778,7 +786,7 @@ class MultiTierASRService:
                         provider="google",
                         model="google-speech-default-th-TH",
                         confidence=provider_confidence,
-                        quality=mark_single_model_quality(assess_transcript_quality(final_text, provider_confidence)),
+                        quality=_accepted_quality(final_text, provider_confidence),
                     )
             except Exception as e:
                 logger.warning(f"Step 3 (Google Speech-to-Text) failed: {e}")

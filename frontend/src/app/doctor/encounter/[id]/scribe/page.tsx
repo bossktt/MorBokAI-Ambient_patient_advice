@@ -204,12 +204,6 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
     });
   };
 
-  const handleLoadPresetScenario = () => {
-    const presetSpeech =
-      'คุณหมอสั่งปรับเพิ่มขนาดยา Metformin เป็น 1000 มิลลิกรัม รับประทานครั้งละ 1 เม็ด เช้า-เย็น หลังอาหารทันที แล้วให้ทิ้งยา Metformin 500 มิลลิกรัม เม็ดสีขาวซองเก่าทันที ห้ามนำมารับประทานซ้ำ ส่วนยาลดความดัน Amlodipine 5 มิลลิกรัม ให้ปรับลดเหลือ 1 เม็ด ก่อนนอน นัดติดตามอาการคลินิกอายุรกรรมหัวใจ วันอาทิตย์ที่ 16 สิงหาคม 2026 เวลา 9:00 น.';
-    setTranscript(presetSpeech);
-  };
-
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
     const s = (sec % 60).toString().padStart(2, '0');
@@ -230,41 +224,23 @@ export default function AmbientScribePage({ params }: { params: Promise<{ id: st
         if (!res.ok) throw new Error(`ASR HTTP ${res.status}`);
         const data = await res.json();
         const hasTranscript = data.status === 'SUCCESS' && data.transcript && data.transcript.trim();
-        const accepted = hasTranscript && data.quality?.status === 'ACCEPT';
-        const candidateTranscript = hasTranscript
+        const finalTranscript = hasTranscript
           ? deduplicateRepeatedSentences(data.transcript.trim())
-          : '';
-        // A rejected ASR result is only a candidate. Never make it the
-        // canonical transcript or let Screen 4 send it to the LLM.
-        const finalTranscript = accepted ? candidateTranscript : '';
-        const decision = data.quality?.decision;
-        const error = accepted
+          : fallbackText;
+        const error = hasTranscript
           ? null
-          : decision === 'NO_RESULT'
-            ? data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป'
-            : decision === 'REVIEW_DISAGREEMENT'
-              ? 'ผลถอดเสียงจาก 2 โมเดลไม่ตรงกัน กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
-              : decision === 'REVIEW_SINGLE_MODEL'
-                ? 'มีผลถอดเสียงเพียงโมเดลเดียว กรุณาตรวจสอบและแก้ไขข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่'
-                : data.quality?.grade_label
-                  ? `${data.quality.grade_label} จึงยังไม่สร้างสรุป กรุณาตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด แล้วกดสร้างสรุปใหม่`
-                  : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
+          : data.error || 'ไม่สามารถถอดเสียงจากไฟล์เสียงได้ กรุณาตรวจสอบหรือแก้ไขข้อความก่อนสร้างสรุป';
         if (localStorage.getItem(`pvs_asr_request_${encounterId}`) !== requestId) return;
-        const alternatives = {
-          primary: candidateTranscript || data.alternatives?.primary || '',
-          verifier: data.alternatives?.verifier || '',
-          browser_preview: accepted ? '' : fallbackText,
-        };
         localStorage.setItem(`pvs_transcript_${encounterId}`, finalTranscript);
         localStorage.setItem('pvs_transcript_latest', finalTranscript);
-        localStorage.setItem(`pvs_transcript_source_${encounterId}`, accepted ? 'backend_asr' : (hasTranscript ? 'backend_asr_quality_failed' : 'browser_preview_after_asr_failure'));
+        localStorage.setItem(`pvs_transcript_source_${encounterId}`, hasTranscript ? 'backend_asr' : 'browser_preview_after_asr_failure');
         localStorage.setItem(`pvs_asr_result_${encounterId}`, JSON.stringify({
-          status: accepted ? 'SUCCESS' : (hasTranscript ? 'QUALITY_FAILED' : 'FAILED'),
+          status: hasTranscript ? 'SUCCESS' : 'FAILED',
           provider: data.provider || null,
           model: data.model || null,
           error,
           quality: data.quality || null,
-          alternatives: hasTranscript || data.alternatives ? alternatives : null,
+          alternatives: data.alternatives || null,
         }));
       } catch (e) {
         console.warn('Backend transcription failed:', e);

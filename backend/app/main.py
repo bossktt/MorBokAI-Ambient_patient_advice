@@ -296,32 +296,6 @@ def process_transcript(payload: dict):
     }
     sanitized_text, meta = DeIdentificationEngine.sanitize_transcript(raw_transcript, session_meta)
     asr_quality = assess_transcript_quality(raw_transcript, payload.get("asr_confidence"))
-    if asr_quality["status"] != "ACCEPT":
-        quality_message = {
-            "POOR": "ระบบเสียงไม่ชัดพอ",
-            "MEDIUM": "ระบบเสียงอยู่ระดับปานกลาง",
-        }.get(asr_quality.get("grade"), "ระบบเสียงยังไม่ผ่านเกณฑ์")
-        append_encounter_log({
-            "event": "ASR_QUALITY_GATE_REJECTED",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(),
-            "encounter_id": encounter_id,
-            "asr_quality": asr_quality,
-        })
-        return {
-            "status": "CANNOT_EXTRACT_SAFELY",
-            "clinical_extraction_status": "CANNOT_EXTRACT_SAFELY",
-            "message": f"{quality_message} จึงยังไม่สร้างสรุป เพราะสรุปอาจคลาดเคลื่อนสูง กรุณาบันทึกเสียงใหม่หรือตรวจแก้ข้อความให้ตรงกับที่แพทย์พูด",
-            "canonical_transcript": raw_transcript,
-            "asr_quality": asr_quality,
-            "diagnosis": "",
-            "instructions": [],
-            "startMeds": [],
-            "stopMeds": [],
-            "changeMeds": [],
-            "followUpDate": "",
-            "llm_calculation_time_sec": 0.0,
-            "llm_draft_word_count": 0,
-        }
     if not DeIdentificationEngine.verify_zero_pii(sanitized_text, session_meta):
         return {
             "status": "CANNOT_EXTRACT_SAFELY",

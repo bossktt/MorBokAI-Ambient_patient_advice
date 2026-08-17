@@ -114,17 +114,20 @@ class TestTranscriptConsistency(unittest.TestCase):
         self.assertEqual(medium["grade"], "MEDIUM")
         self.assertEqual(medium["status"], "REJECT")
 
-    def test_low_asr_quality_blocks_llm_call(self):
+    def test_process_transcript_proceeds_without_asr_quality_gate(self):
         with patch("app.main.get_llm_adapter") as get_adapter, patch("app.main.append_encounter_log"):
+            get_adapter.return_value.generate_clinical_summary.return_value = {
+                "patient_view": {"diagnosis": "พักผ่อน", "key_instructions": ["พักผ่อน"], "follow_up": {"date": "", "location": "", "reason": ""}},
+                "medication_box": {},
+                "evidence": {"diagnosis": "พักผ่อน", "key_instructions": ["พักผ่อน"]},
+            }
             response = client.post(
                 "/api/v1/encounters/process-transcript",
                 json={"encounter_id": "ENC_LOW_ASR", "raw_transcript": "!!!! ????? ...."},
             )
 
         data = response.json()
-        self.assertEqual(data["status"], "CANNOT_EXTRACT_SAFELY")
-        self.assertEqual(data["asr_quality"]["status"], "REJECT")
-        get_adapter.assert_not_called()
+        get_adapter.assert_called_once()
 
     def test_asr_quality_result_is_written_to_encounter_log(self):
         quality = assess_transcript_quality("!!!! ????? ....")
